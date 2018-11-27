@@ -1,4 +1,5 @@
 import gym
+import quanser_robots
 import numpy as np
 from profilehooks import timecall
 
@@ -6,12 +7,16 @@ import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split, KFold, cross_val_score
+from sklearn.model_selection import train_test_split, KFold, cross_val_score, GridSearchCV
 from sklearn.preprocessing import scale
 from sklearn.decomposition import PCA
 from sklearn.svm import SVR
 from sklearn.kernel_ridge import KernelRidge
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.linear_model import ElasticNet, BayesianRidge, SGDRegressor
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin, clone
 
 #env = gym.make('Pendulum-v0')
 
@@ -21,10 +26,8 @@ def generate_data(train_size, environment='Pendulum-v0'):
 
     state = env.reset()
 
-    rewards = []
-    actions = []
-    states = []
-    next_states = []
+    rewards, next_states = [], []
+    actions, states = [], []
     for i in range(train_size):
         action = env.action_space.sample()
         next_state, reward, done, info = env.step(action)
@@ -36,7 +39,6 @@ def generate_data(train_size, environment='Pendulum-v0'):
             state = env.reset()
         else:
             state = next_state
-    #reward_data = np.vstack((actions.T, states.T))
 
     return np.array(states), np.array(actions), np.array(rewards), np.array(next_states)
 
@@ -52,6 +54,16 @@ def run_task_one(train_size, model, param):
         clf = SVR(gamma='scale')
     if model == 'krr':
         clf = KernelRidge(alpha=param, kernel='polynomial', degree=8)
+    if model == 'rfr':
+        clf = RandomForestRegressor(n_estimators=int(np.round(param)))
+    if model == 'gpr':
+        clf = GaussianProcessRegressor()
+    if model == 'gbr':
+        clf = GradientBoostingRegressor()
+    if model == 'sgd':
+        clf = SGDRegressor
+    if model == 'mlp':
+        clf = MLPRegressor(solver='lbfgs', max_iter=200)
     clf.fit(X_train, y_train)
 
     #predictions = clf.predict(X_test)
@@ -62,11 +74,11 @@ def run_task_one(train_size, model, param):
     #print("Training error: {}, Test error: {}".format(training_error, test_error))
 
 
-def average_error(size, model, degree=8, verbose=False):
+def average_error(size, model, degree=30, verbose=False):
     error, std = 0, 0
     errors, stds = [], []
     for i in range(size):
-        mean, s = run_task_two(2000, model, degree)
+        mean, s = run_task_one(6000, model, degree)
         error += mean
         std += s
         errors.append(mean)
@@ -77,8 +89,8 @@ def average_error(size, model, degree=8, verbose=False):
         plt.plot([i for i in range(size)], errors, label="mean cv error")
         plt.plot([i for i in range(size)], stds, label='standard deviation')
         plt.legend()
-        plt.title('Polynomial Kernel degree: {}, mean error: {}, standard dev: {}'
-              .format(9, np.round(error/size,6), np.round(std/size, 6)))
+        plt.title('model: {} n_samples: {}, mean error: {}, standard dev: {}'
+              .format(model.upper(), 6000, np.round(error/size,6), np.round(std/size, 6)))
         plt.show()
     return error/size, std/size
 
@@ -95,7 +107,7 @@ def improve_alpha(low, high, n, samples):
     errors, stds = [], []
     it = 0
     for alpha in alphas:
-        mean, s = run_task_one(samples, 'krr', alpha)
+        mean, s = run_task_two(samples, 'rfr', alpha)
         errors.append(mean)
         stds.append(s)
         it += 1
@@ -106,22 +118,8 @@ def improve_alpha(low, high, n, samples):
     plt.legend()
     plt.show()
 
-def optimize_degree(low, high, n, samples):
-    degrees = np.linspace(low, high, n)
-
-    errors, stds = [], []
-    it = 0
-    for degree in degrees:
-        mean, s = run_task_two(samples, 'krr', degree)
-        errors.append(mean)
-        stds.append(s)
-        it += 1
-        print("{} % finished (Iteration {}/{}...)".format(np.round(100 * it / n, 1), it, n))
-    plt.plot(degrees, errors, label='cv error')
-    plt.plot(degrees, stds, label='standard deviation')
-    plt.title('Optimize degree KRR (state approximation)  ({} data samples)'.format(samples))
-    plt.legend()
-    plt.show()
+def optimize(model, low, high, n, samples):
+    return
 
 @timecall()
 def sample_size_sampling(verbose=False):
@@ -129,13 +127,13 @@ def sample_size_sampling(verbose=False):
     errors = []
     i = 0
     for sample_size in sample_sizes:
-        mean, std = run_task_two(int(np.round(sample_size, 0)), 'rfr', 9)
+        mean, std = run_task_two(int(np.round(sample_size, 0)), 'mlp', 9)
         errors.append(mean)
         i += 1
         if verbose:
             print("Sampling {} % complete".format(np.round(100 * i / 100, 1)))
     plt.plot(sample_sizes, errors, label='cv error')
-    plt.title('RFR error for different sample sizes')
+    plt.title('Elastic Net error for different sample sizes')
     plt.legend()
     plt.show()
 
@@ -153,17 +151,74 @@ def run_task_two(size, model, param):
     if model == 'krr':
         clf = KernelRidge(alpha=0.6, kernel='polynomial', degree=param)
     if model == 'rfr':
-        clf = RandomForestRegressor(n_estimators=50)
+        clf = RandomForestRegressor(n_estimators=int(np.round(param)))
+    if model == 'gpr':
+        clf = GaussianProcessRegressor()
+    if model == 'gbr':
+        clf = GradientBoostingRegressor()
+    if model == 'mlp':
+        clf = MLPRegressor(solver='lbfgs', max_iter=300)
     clf.fit(X_train, y_train)
 
     error = cross_validated_error(clf, X_train, y_train, 10)
-
     return np.round(error.mean(), 5), np.round(error.std(), 5)
 
-#print(average_error(200, 'svr', True))
+class AveragingModels(BaseEstimator, RegressorMixin, TransformerMixin):
+    def __init__(self, models):
+        self.models = models
+
+    # we define clones of the original models to fit the data in
+    def fit(self, X, y):
+        self.models_ = [clone(x) for x in self.models]
+
+        # Train cloned base models
+        for model in self.models_:
+            model.fit(X, y)
+
+        return self
+
+    # Now we do the predictions for cloned models and average them
+    def predict(self, X):
+        predictions = np.empty((X.shape[0], X.shape[1]-1))
+        for model in self.models_:
+            predictions = np.add(predictions, model.predict(X))
+        predictions = predictions / len(self.models_)
+        return predictions
+
+def test_averaging_models(samples, environment, learn_rewards=False):
+    states, actions, rewards, next_states = generate_data(samples, environment)
+    data = np.vstack((actions.T, states.T))
+    data = data.T
+    if learn_rewards:
+        labels = rewards
+    else:
+        labels = next_states
+
+    X_train, X_test, y_train, y_test = train_test_split(data, labels)
+
+    clf_RFR = RandomForestRegressor(n_estimators=30)
+    clf_GPR = GaussianProcessRegressor()
+    clf_GBR = GradientBoostingRegressor()
+    clf_MIX = AveragingModels(models=(clf_GPR, clf_RFR))
+
+    clf_MIX.fit(X_train, y_train)
+    clf_RFR.fit(X_train, y_train)
+    clf_GPR.fit(X_train, y_train)
+    clf_GBR.fit(X_train, y_train)
+
+    MIX_error = cross_validated_error(clf_MIX, X_train, y_train, 10).mean()
+    #RFR_error = cross_validated_error(clf_RFR, X_train, y_train, 10).mean()
+    #GPR_error = cross_validated_error(clf_GPR, X_train, y_train, 10).mean()
+    #SVR_error = cross_validated_error(clf_SVR, X_train, y_train, 20)
+
+    print("Mixin error: {} \n RFR error: {} \n GPR error: {} \n"
+          .format(MIX_error, 0, 0))
+
+#test_averaging_models(5000, 'Pendulum-v0')
+print(average_error(10,'mlp', verbose=True))
 #print(sample_size_sampling(verbose=True))
-#print(average_error(500, 'krr', True))
-#improve_alpha(0.001, 1, 200, 2000)
+#print(average_error(10, 'rfr', verbose=True))
+#improve_alpha(10, 100, 90, 3000)
 #optimize_degree(1,10,10,3000)
 # TODO: Create a nice table of the dataset in pandas including labels
 # TODO: Use other methods: e.g. XGBoost, RandomForestRegression
@@ -173,9 +228,8 @@ def run_task_two(size, model, param):
 # EXTERNAL METHODS:
 def fit_state_model(environment):
     if environment == 'Pendulum-v0':
-        states, actions, rewards, next_states = generate_data(10000, environment)
-        #clf = KernelRidge(alpha=0.5, kernel='polynomial', degree=9)
-        clf = RandomForestRegressor(n_estimators=30)
+        states, actions, rewards, next_states = generate_data(5000, environment)
+        clf = GaussianProcessRegressor()
     else:
         return -1
     data = np.vstack((actions.T, states.T))
@@ -189,8 +243,7 @@ def fit_state_model(environment):
 def fit_reward_model(environment):
     if environment == 'Pendulum-v0':
         states, actions, rewards, next_states = generate_data(10000, environment)
-        #clf = KernelRidge(alpha=0.5, kernel='polynomial', degree=8)
-        clf = RandomForestRegressor(n_estimators=30)
+        clf = MLPRegressor(solver='lbfgs')
     else:
         return -1
     data = np.vstack((actions.T, states.T))
