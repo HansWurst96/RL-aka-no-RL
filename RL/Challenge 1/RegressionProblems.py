@@ -1,5 +1,5 @@
 import gym
-import quanser_robots
+import quanser_robots.pendulum
 import numpy as np
 from profilehooks import timecall
 
@@ -8,7 +8,7 @@ from mpl_toolkits import mplot3d
 
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split, KFold, cross_val_score, GridSearchCV
-from sklearn.preprocessing import scale
+from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.svm import SVR
 from sklearn.kernel_ridge import KernelRidge
@@ -20,7 +20,7 @@ from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin, clone
 
 #env = gym.make('Pendulum-v0')
 
-def generate_data(train_size, environment='Pendulum-v0'):
+def generate_data(train_size, environment='Pendulum-v2'):
 
     env = gym.make(environment)
 
@@ -55,7 +55,7 @@ def run_task_one(train_size, model, param):
     if model == 'krr':
         clf = KernelRidge(alpha=param, kernel='polynomial', degree=8)
     if model == 'rfr':
-        clf = RandomForestRegressor(n_estimators=int(np.round(param)))
+        clf = RandomForestRegressor(n_estimators=30)
     if model == 'gpr':
         clf = GaussianProcessRegressor()
     if model == 'gbr':
@@ -63,6 +63,10 @@ def run_task_one(train_size, model, param):
     if model == 'sgd':
         clf = SGDRegressor
     if model == 'mlp':
+        scaler = StandardScaler()
+        scaler.fit(X_train)
+        X_train = scaler.transform(X_train)
+        X_test = scaler.transform(X_test)
         clf = MLPRegressor(solver='lbfgs', max_iter=200)
     clf.fit(X_train, y_train)
 
@@ -74,11 +78,11 @@ def run_task_one(train_size, model, param):
     #print("Training error: {}, Test error: {}".format(training_error, test_error))
 
 
-def average_error(size, model, degree=30, verbose=False):
+def average_error(size, model, degree=30, samples=6000, verbose=False):
     error, std = 0, 0
     errors, stds = [], []
     for i in range(size):
-        mean, s = run_task_one(6000, model, degree)
+        mean, s = run_task_one(samples, model, degree)
         error += mean
         std += s
         errors.append(mean)
@@ -123,7 +127,7 @@ def optimize(model, low, high, n, samples):
 
 @timecall()
 def sample_size_sampling(verbose=False):
-    sample_sizes = np.linspace(500, 10000, 90)
+    sample_sizes = np.linspace(500, 10000, 70)
     errors = []
     i = 0
     for sample_size in sample_sizes:
@@ -151,12 +155,16 @@ def run_task_two(size, model, param):
     if model == 'krr':
         clf = KernelRidge(alpha=0.6, kernel='polynomial', degree=param)
     if model == 'rfr':
-        clf = RandomForestRegressor(n_estimators=int(np.round(param)))
+        clf = RandomForestRegressor(n_estimators=30)
     if model == 'gpr':
         clf = GaussianProcessRegressor()
     if model == 'gbr':
         clf = GradientBoostingRegressor()
     if model == 'mlp':
+        scaler = StandardScaler()
+        scaler.fit(X_train)
+        X_train = scaler.transform(X_train)
+        X_test = scaler.transform(X_test)
         clf = MLPRegressor(solver='lbfgs', max_iter=300)
     clf.fit(X_train, y_train)
 
@@ -227,9 +235,9 @@ print(average_error(10,'mlp', verbose=True))
 
 # EXTERNAL METHODS:
 def fit_state_model(environment):
-    if environment == 'Pendulum-v0':
-        states, actions, rewards, next_states = generate_data(5000, environment)
-        clf = GaussianProcessRegressor()
+    if environment == 'Pendulum-v2':
+        states, actions, rewards, next_states = generate_data(10000, environment)
+        clf = RandomForestRegressor(n_estimators=30)
     else:
         return -1
     data = np.vstack((actions.T, states.T))
@@ -241,9 +249,9 @@ def fit_state_model(environment):
     return clf
 
 def fit_reward_model(environment):
-    if environment == 'Pendulum-v0':
+    if environment == 'Pendulum-v2':
         states, actions, rewards, next_states = generate_data(10000, environment)
-        clf = MLPRegressor(solver='lbfgs')
+        clf = MLPRegressor(solver='lbfgs', max_iter=300)
     else:
         return -1
     data = np.vstack((actions.T, states.T))
