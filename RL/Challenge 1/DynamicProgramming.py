@@ -9,7 +9,7 @@ import RegressionProblems as rp
 # TODO: Disabling train_test_split?
 
 MAX_ITERATIONS = 5
-DISCRETIZATION = 6
+DISCRETIZATION = 9
 
 class ValueIteration(object):
     def __init__(self, environment, tolerance, discount_factor):
@@ -29,9 +29,28 @@ class ValueIteration(object):
         self.reward_model = rp.fit_reward_model(environment)
 
         self.state = self.env.reset()
-        self.discretized_states = self.discretize_state_space(DISCRETIZATION)
+        #self.discretized_states = self.discretize_state_space(DISCRETIZATION)
+
+
+        s = 0
+        self.discretized_states = []
+        for i in np.linspace(-self.env.observation_space.high[0], self.env.observation_space.high[0],11 ):
+            for j in np.linspace(-self.env.observation_space.high[1], self.env.observation_space.high[1], 15 ):
+                    state = [i, j]
+                    if s == 0:
+                        self.discretized_states = state
+                        s = 1
+                    else:
+                        self.discretized_states =  np.vstack((self.discretized_states, state))
+        #print(self.discretized_states)
+
         self.discretized_actions = self.discretize_action_space(DISCRETIZATION)
-        self.value_table = np.zeros(self.discretized_states.shape[1])
+        self.value_table = np.zeros(self.discretized_states.shape[0])
+        self.policy_table = np.zeros(self.discretized_states.shape[0])
+
+        self.debug = 0
+
+
 
     def info(self, verbose=False):
         if verbose:
@@ -57,14 +76,28 @@ class ValueIteration(object):
         # TODO: Do it for every entry separately ?
         array = self.discretized_states
         difference = np.inf
+
+        #MAYBE
+        # TODO: idk, prob correct
         idx = array.shape[1] + 1
 
-        for i in range(array.shape[1]):
-            dif = np.linalg.norm(array[:,i] - state)
-            if dif < difference:
-                difference = dif
-                idx = i
-        return array[:,idx], idx
+        nearest_theta = -20
+        nearest_state = [-20, -50]
+        for i in range(array.shape[0]):
+            if np.abs(array[i][0] - state[0][0]) < np.abs(nearest_theta - state[0][0]):
+                nearest_theta = array[i][0]
+        for i in range(array.shape[0]):
+            if array[i][0] == nearest_theta:
+                if np.abs(array[i][1] - state[0][1]) < np.abs(nearest_state[1] - state[0][1]):
+                    nearest_state = array[i]
+                    idx = i
+
+        #for i in range(array.shape[0]):
+            #dif = np.linalg.norm(array[i,:] - state)
+            #if dif < difference:
+                #difference = dif
+                #idx = i
+        return nearest_state, idx
 
     def discretize_state_space(self, num):
         high = self.env.observation_space.high
@@ -101,42 +134,91 @@ class ValueIteration(object):
         value = np.max(predicted_rewards + self.gamma * predicted_values)
         return value
 
-    def bellman_tabular(self, state, actions):
+    def bellman_tabular(self, state, actions, isVI, action):
         table = self.value_table
-        value = np.max([self.reward_model.predict(np.append(a, state).reshape(1, -1)) +
+        #for VI
+        if isVI:
+            value = np.max([self.reward_model.predict(np.append(a, state).reshape(1, -1)) +
                         self.gamma * table[self.approximate_next_state(state, a, tabular=True)] for a in actions])
+        #for PI
+        else:
+            value = self.reward_model.predict(np.append(action, state).reshape(1, -1)) + self.gamma * table[
+                self.approximate_next_state(state, action, tabular=True)]
+
+
         return value
 
-    def iterate(self):
+
+    def iterate(self, isVI = True):
         i = 0
         delta = 1
         states = self.discretized_states
-        print(states.shape)
         actions = self.discretized_actions
         while delta > self.tolerance:
             delta = 0
-            for state in range(states.shape[1]):
+            for state in range(states.shape[0]):
+
+                #bad solution
+                # TODO:  implement new method since action is not used for VI or find other solution
+                action = self.policy_table[state]
+
                 v = self.value_table[state]
-                value = self.bellman_tabular(states[:,state], actions)
+                value = self.bellman_tabular(states[state,:], actions, isVI, action)
+
                 self.value_table[state] = value
                 abs = np.abs(v - value)
                 delta = np.max([delta, abs])
+                print(delta)
 
         # Get policy
+
+    def PI(self):
+        print("END")
+        print("_____")
+        self.iterate(False)
+        print("_____")
+        print("START")
+        states = self.discretized_states
+        actions = self.discretized_actions
+        policy_stable = True
+
+        for state in range(states.shape[0]):
+            #print(state)
+            old_action = self.policy_table[state]
+            max_idx = np.argmax([self.reward_model.predict(np.append(a, states[state, :]).reshape(1, -1)) +
+                        self.gamma * self.value_table[self.approximate_next_state(states[state, :], a, tabular=True)] for a in actions])
+
+
+
+            self.policy_table[state] = actions[max_idx]
+            if old_action != self.policy_table[state]:
+                policy_stable = False
+
+
+        if policy_stable is not True:
+            self.PI()
+        else:
+            return
 
 
 
 def main(environment, tolerance):
     VI = ValueIteration(environment, tolerance, 0.9)
-    VI.info(verbose=True)
     s, a = VI.sample_input()
-    print(VI.discretize_state_space(4))
     actions = VI.discretize_action_space(4)
     #print(VI.bellman_equation(VI.state, 0, actions))
-    print(VI.iterate())
+    VI.PI()
+    envt = VI.env
 
+    for i in range(200):
+        obs = envt.reset()
+        done = False
+        while not done:
+            ns, idx = VI.find_nearest_state(obs)
+            action = VI.policy_table[idx]
+            obs, reward, done, info = envt.step(np.array([action]))
+            envt.render()
     #print(VI.approximate_next_state(s,a))
 
-main('Pendulum-v0', 0.001)
+main('Pendulum-v2', 0.001)
 
-print(gym.make('Pendulum-v0').observation_space.high)
