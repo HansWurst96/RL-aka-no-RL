@@ -32,19 +32,21 @@ class ValueIteration(object):
         #self.discretized_states = self.discretize_state_space(DISCRETIZATION)
 
 
+
         s = 0
         self.discretized_states = []
-        for i in np.linspace(-self.env.observation_space.high[0], self.env.observation_space.high[0],11 ):
-            for j in np.linspace(-self.env.observation_space.high[1], self.env.observation_space.high[1], 15 ):
+        for i in np.linspace(-self.env.observation_space.high[0], self.env.observation_space.high[0],13 ):
+            for j in np.linspace(-self.env.observation_space.high[1], self.env.observation_space.high[1], 39 ):
                     state = [i, j]
                     if s == 0:
                         self.discretized_states = state
                         s = 1
                     else:
                         self.discretized_states =  np.vstack((self.discretized_states, state))
-        #print(self.discretized_states)
+        print(self.discretized_states)
 
-        self.discretized_actions = self.discretize_action_space(DISCRETIZATION)
+        self.discretized_actions = [-2,0, 2]
+        print(self.discretized_actions)
         self.value_table = np.zeros(self.discretized_states.shape[0])
         self.policy_table = np.zeros(self.discretized_states.shape[0])
 
@@ -80,15 +82,22 @@ class ValueIteration(object):
         #MAYBE
         # TODO: idk, prob correct
         idx = array.shape[1] + 1
+        debug1 = state
+        debug2 = array[0]
+
 
         nearest_theta = -20
         nearest_state = [-20, -50]
         for i in range(array.shape[0]):
+
             if np.abs(array[i][0] - state[0][0]) < np.abs(nearest_theta - state[0][0]):
                 nearest_theta = array[i][0]
         for i in range(array.shape[0]):
             if array[i][0] == nearest_theta:
                 if np.abs(array[i][1] - state[0][1]) < np.abs(nearest_state[1] - state[0][1]):
+                    #print("val")
+                    #print(array[i][1] - state[0][1])
+                    #print(nearest_state[1] - state[0][1])
                     nearest_state = array[i]
                     idx = i
 
@@ -168,7 +177,7 @@ class ValueIteration(object):
                 self.value_table[state] = value
                 abs = np.abs(v - value)
                 delta = np.max([delta, abs])
-                print(delta)
+                #print(delta)
 
         # Get policy
 
@@ -208,17 +217,35 @@ def main(environment, tolerance):
     actions = VI.discretize_action_space(4)
     #print(VI.bellman_equation(VI.state, 0, actions))
     VI.PI()
-    envt = VI.env
+    print(VI.policy_table)
 
+    rewards = []
+    calc_rewards = []
     for i in range(200):
-        obs = envt.reset()
+        obs = VI.env.reset()
+        #obs = [0, 0]
+        obs = np.asarray([obs])
         done = False
         while not done:
+            print("___")
+
             ns, idx = VI.find_nearest_state(obs)
             action = VI.policy_table[idx]
-            obs, reward, done, info = envt.step(np.array([action]))
-            envt.render()
+
+            obs, reward, done, info = VI.env.step(np.array([action]))
+
+            print(VI.reward_model.predict(np.append(action, VI.discretized_states[idx, :]).reshape(1, -1)))
+            print(reward)
+            rewards.append(reward)
+            calc_rewards.append(VI.reward_model.predict(np.append(action, VI.discretized_states[idx, :]).reshape(1, -1)))
+            #obs = [0, 0]
+            obs = np.asarray([obs])
+            VI.env.render()
+        sum = 0
+        for i in range(len(rewards)):
+            sum += (rewards[i] - calc_rewards[i])**2
+        print(sum/len(rewards))
     #print(VI.approximate_next_state(s,a))
 
-main('Pendulum-v2', 0.001)
+main('Pendulum-v2', 100)
 

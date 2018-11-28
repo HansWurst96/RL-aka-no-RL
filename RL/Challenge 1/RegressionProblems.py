@@ -1,7 +1,7 @@
 import gym
 import quanser_robots.pendulum
 import numpy as np
-from profilehooks import timecall
+#from profilehooks import timecall
 
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
@@ -105,7 +105,7 @@ def cross_validated_error(model, X_train, y_train, n_folds):
     return rmse
 
 # All values for alpha yield a pretty high RMSE of around 4
-@timecall()
+#@timecall()
 def improve_alpha(low, high, n, samples):
     alphas = np.linspace(low, high, n)
     errors, stds = [], []
@@ -125,7 +125,7 @@ def improve_alpha(low, high, n, samples):
 def optimize(model, low, high, n, samples):
     return
 
-@timecall()
+#@timecall()
 def sample_size_sampling(verbose=False):
     sample_sizes = np.linspace(500, 10000, 70)
     errors = []
@@ -223,7 +223,7 @@ def test_averaging_models(samples, environment, learn_rewards=False):
           .format(MIX_error, 0, 0))
 
 #test_averaging_models(5000, 'Pendulum-v0')
-print(average_error(10,'mlp', verbose=True))
+#print(average_error(10,'mlp', verbose=True))
 #print(sample_size_sampling(verbose=True))
 #print(average_error(10, 'rfr', verbose=True))
 #improve_alpha(10, 100, 90, 3000)
