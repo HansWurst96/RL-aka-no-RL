@@ -132,6 +132,13 @@ class ValueIteration(object):
                 discrete_actions = np.vstack((discrete_actions,interval))
         return discrete_actions
 
+    def log_spacing(self, high, n, low=0.001):
+        right_side = np.geomspace(low, high, int(np.round(n / 2)))
+        left_side = np.flip(-np.copy(right_side))
+        left_side = np.append(left_side, 0)
+        space = np.concatenate((left_side, right_side))
+        return space
+
     def bellman_equation(self, state, iteration, actions):
         if iteration >= MAX_ITERATIONS:
             predicted_rewards = [self.reward_model.predict(np.append(a, state).reshape(1, -1)) for a in actions]
@@ -214,10 +221,11 @@ class ValueIteration(object):
 def main(environment, tolerance):
     VI = ValueIteration(environment, tolerance, 0.9)
     s, a = VI.sample_input()
-    actions = VI.discretize_action_space(4)
+    actions = VI.discretize_action_space(25)
+    print(actions)
     #print(VI.bellman_equation(VI.state, 0, actions))
-    VI.PI()
-    print(VI.policy_table)
+    #VI.PI()
+    #print(VI.policy_table)
 
     rewards = []
     calc_rewards = []
