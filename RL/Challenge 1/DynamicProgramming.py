@@ -216,16 +216,124 @@ class ValueIteration(object):
         else:
             return
 
+class PolicyIteration(object):
+    def __init__(self, environment, tolerance, discount_factor):
+        self.env = gym.make(environment)
+        self.state_space = self.env.observation_space.shape[0]
+        self.action_space = self.env.action_space.shape[0]
+
+        self.tolerance = tolerance
+        self.gamma = discount_factor
+
+        self.state_model = rp.fit_state_model(environment)
+        self.reward_model = rp.fit_reward_model(environment)
+
+        self.state = self.env.reset()
+        self.discrete_states = self.discretize_states(13, 39)
+        self.discrete_actions = np.array([-2, 0, 2])
+        self.value_table = np.zeros(self.discrete_states.shape[0])
+        self.policy_table = np.ones(self.discrete_states.shape[0])
+
+    def discretize_states(self, n_theta, n_theta_dot):
+        disc_states = []
+        s = 0
+        for i in np.linspace(-self.env.observation_space.high[0], self.env.observation_space.high[0], n_theta):
+            for j in np.linspace(-self.env.observation_space.high[1], self.env.observation_space.high[1], n_theta_dot):
+                    state = [i, j]
+                    if s == 0:
+                        disc_states = state
+                        s = 1
+                    else:
+                        disc_states = np.vstack((disc_states, state))
+        return np.array(disc_states)
+
+    def policy_evaluation(self):
+        while True:
+            delta = 0
+            for s in range(self.discrete_states.shape[0]):
+                temp = self.value_table[s]
+                action = self.policy_table[s]
+                state = self.discrete_states[s]
+                value = self.predict_reward(state, action) + self.gamma * self.value_table[self.predict_next_state(state, action, True)]
+                self.value_table[s] = value
+                delta = np.max([delta, np.abs(temp - value)])
+                if delta < self.tolerance:
+                    print("Starting policy improvement")
+                    self.policy_improvement()
+                    break
 
 
+    def policy_improvement(self):
+        policy_stable = True
+        for s in range(self.discrete_states.shape[0]):
+            state = self.discrete_states[s]
+            temp = self.policy_table[s]
+            p = np.argmax([self.predict_reward(state, a) + self.gamma * self.predict_next_state(state, a, False) for a in self.discrete_actions])
+            self.policy_table[s] = p
+            print(temp, p)
+            if not (temp == p):
+                policy_stable = False
+            if policy_stable:
+                break
+            else:
+                print("Starting Policy evaluation...")
+                self.policy_evaluation()
+            return self.value_table, self.policy_table
+
+    def policy_iteration(self):
+        self.policy_evaluation()
+        return self.value_table, self.policy_table
+
+    def predict_reward(self, state, action):
+        clf = self.reward_model
+        print(action)
+        x, r, y, z = self.env.step(action)
+        query_point = np.append(action, state).reshape(1, -1)
+        prediction = clf.predict(query_point)
+        print("Prediction: ", prediction)
+        print("True: ", r)
+        return prediction
+
+    def predict_next_state(self, state, action, index):
+        # Mittelmäßige Outputs
+        clf = self.state_model
+        states = self.discrete_states
+        query_point = np.append(action, state).reshape(1, -1)
+        prediction = clf.predict(query_point)
+        idx = states.shape[0] +1
+        best = np.inf
+        for i in range(states.shape[0]):
+            norm = np.linalg.norm(states[i].reshape(1, -1) - prediction)
+            if norm < best:
+                best = norm
+                idx = i
+        if index:
+            return idx
+        else:
+            return states[idx]
+
+    def sample_input(self):
+        action = self.env.action_space.sample()
+        return np.array(self.state), np.array(action)
+
+def test(env):
+    PI = PolicyIteration(env, 0.01, 0.95)
+    print(PI.discrete_states[0].shape)
+    state, action = PI.sample_input()
+    print("Sample: ", state, action)
+    print(PI.predict_next_state(state, action, False))
+    print(PI.policy_iteration())
+
+
+test('Pendulum-v2')
 def main(environment, tolerance):
     VI = ValueIteration(environment, tolerance, 0.9)
     s, a = VI.sample_input()
     actions = VI.discretize_action_space(25)
-    print(actions)
+    #print(actions)
     #print(VI.bellman_equation(VI.state, 0, actions))
-    #VI.PI()
-    #print(VI.policy_table)
+    VI.PI()
+    print(VI.policy_table)
 
     rewards = []
     calc_rewards = []
@@ -255,5 +363,5 @@ def main(environment, tolerance):
         print(sum/len(rewards))
     #print(VI.approximate_next_state(s,a))
 
-main('Pendulum-v2', 100)
+#main('Pendulum-v2', 100)
 
