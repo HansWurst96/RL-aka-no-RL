@@ -229,7 +229,7 @@ class PolicyIteration(object):
         self.reward_model = rp.fit_reward_model(environment)
 
         self.state = self.env.reset()
-        self.discrete_states = self.discretize_states(13, 39)
+        self.discrete_states = self.discretize_states(10, 15)
         self.discrete_actions = np.array([-2, 0, 2])
         self.value_table = np.zeros(self.discrete_states.shape[0])
         self.policy_table = np.ones(self.discrete_states.shape[0])
@@ -248,8 +248,11 @@ class PolicyIteration(object):
         return np.array(disc_states)
 
     def policy_evaluation(self):
+        sweep = 0
         while True:
             delta = 0
+            if sweep % 5 == 0 or sweep in range(5):
+                print("Sweep number: ", sweep, "(evaluation)")
             for s in range(self.discrete_states.shape[0]):
                 temp = self.value_table[s]
                 action = self.policy_table[s]
@@ -257,41 +260,62 @@ class PolicyIteration(object):
                 value = self.predict_reward(state, action) + self.gamma * self.value_table[self.predict_next_state(state, action, True)]
                 self.value_table[s] = value
                 delta = np.max([delta, np.abs(temp - value)])
-                if delta < self.tolerance:
-                    print("Starting policy improvement")
-                    self.policy_improvement()
-                    break
+                #print(delta)
+                if sweep == 0:
+                    print(delta)
+            sweep += 1
+            if delta < self.tolerance:
+                print("Starting policy improvement")
+                break
+        #return self.value_table
 
 
     def policy_improvement(self):
-        policy_stable = True
-        for s in range(self.discrete_states.shape[0]):
-            state = self.discrete_states[s]
-            temp = self.policy_table[s]
-            p = np.argmax([self.predict_reward(state, a) + self.gamma * self.predict_next_state(state, a, False) for a in self.discrete_actions])
-            self.policy_table[s] = p
-            print(temp, p)
-            if not (temp == p):
-                policy_stable = False
+        while True:
+            print("Starting policy evaluation")
+            self.policy_evaluation()
+            policy_stable = True
+            for s in range(self.discrete_states.shape[0]):
+                state = self.discrete_states[s]
+                temp = self.policy_table[s]
+                p = np.argmax([self.predict_reward(state, a) + self.gamma * self.predict_next_state(state, a, False) for a in self.discrete_actions])
+                p = self.find_next_action(p)
+                self.policy_table[s] = p
+                print(temp, p)
+                if not (temp == p):
+                    policy_stable = False
             if policy_stable:
+                print("Policy stable")
+                #return self.value_table, self.policy_table
                 break
-            else:
-                print("Starting Policy evaluation...")
-                self.policy_evaluation()
-            return self.value_table, self.policy_table
+
 
     def policy_iteration(self):
-        self.policy_evaluation()
+        self.policy_improvement()
         return self.value_table, self.policy_table
+
+    def test_policy(self):
+        state = self.state
+        for i in range(100):
+            state = self.env.reset()
+            done = False
+            while not done:
+                idx, state = self.find_nearest_state(self.discrete_states, state)
+                action = np.asarray(self.policy_table[idx]).reshape(1, -1)
+                self.env.render()
+                next_state, reward, done, info = self.env.step(action)
+                state = next_state
+
 
     def predict_reward(self, state, action):
         clf = self.reward_model
-        print(action)
-        x, r, y, z = self.env.step(action)
+        #print("action:", (np.asarray(action).reshape(1, -1)))
+        #print((self.env.action_space.sample().shape))
+        #x, r, y, z = self.env.step(np.asarray(action).reshape(1, -1))
         query_point = np.append(action, state).reshape(1, -1)
         prediction = clf.predict(query_point)
-        print("Prediction: ", prediction)
-        print("True: ", r)
+        #print("Prediction: ", prediction)
+        #print("True: ", r)
         return prediction
 
     def predict_next_state(self, state, action, index):
@@ -300,29 +324,39 @@ class PolicyIteration(object):
         states = self.discrete_states
         query_point = np.append(action, state).reshape(1, -1)
         prediction = clf.predict(query_point)
-        idx = states.shape[0] +1
-        best = np.inf
-        for i in range(states.shape[0]):
-            norm = np.linalg.norm(states[i].reshape(1, -1) - prediction)
-            if norm < best:
-                best = norm
-                idx = i
+        idx, nearest_state = self.find_nearest_state(states, prediction)
         if index:
             return idx
         else:
-            return states[idx]
+            return nearest_state
+
+    def find_nearest_state(self, states, state):
+        idx = states.shape[0] + 1
+        best = np.inf
+        for i in range(states.shape[0]):
+            norm = np.linalg.norm(states[i].reshape(1, -1) - state)
+            if norm < best:
+                best = norm
+                idx = i
+        return idx, states[idx]
+
+    def find_next_action(self, action):
+        array = np.asarray(self.discrete_actions)
+        idx = (np.abs(array - action)).argmin()
+        return array[idx]
 
     def sample_input(self):
         action = self.env.action_space.sample()
         return np.array(self.state), np.array(action)
 
 def test(env):
-    PI = PolicyIteration(env, 0.01, 0.95)
+    PI = PolicyIteration(env, 0.00001, 0.95)
     print(PI.discrete_states[0].shape)
     state, action = PI.sample_input()
     print("Sample: ", state, action)
     print(PI.predict_next_state(state, action, False))
     print(PI.policy_iteration())
+    PI.test_policy()
 
 
 test('Pendulum-v2')
