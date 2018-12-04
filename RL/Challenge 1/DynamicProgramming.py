@@ -1,7 +1,8 @@
 import numpy as np
 import gym
 import quanser_robots
-
+from multiprocessing.dummy import Pool as ThreadPool
+import multiprocessing
 import sklearn
 
 import RegressionProblems as rp
@@ -229,16 +230,31 @@ class PolicyIteration(object):
         self.reward_model = rp.fit_reward_model(environment)
 
         self.state = self.env.reset()
-        self.discrete_states = self.discretize_states(10, 15)
-        self.discrete_actions = np.array([-2, 0, 2])
+        self.discrete_states = self.discretize_states(15, 20)
+        self.discrete_actions = np.array([-2, -1, -0.1 ,0, 0.1, 1, 2])
         self.value_table = np.zeros(self.discrete_states.shape[0])
         self.policy_table = np.ones(self.discrete_states.shape[0])
 
     def discretize_states(self, n_theta, n_theta_dot):
         disc_states = []
         s = 0
-        for i in np.linspace(-self.env.observation_space.high[0], self.env.observation_space.high[0], n_theta):
-            for j in np.linspace(-self.env.observation_space.high[1], self.env.observation_space.high[1], n_theta_dot):
+        eps = 0.01
+        theta = []
+        theta_down1  = np.linspace(-np.pi/2 + eps, -np.pi/4, 10)
+        theta_down2 = np.linspace(np.pi / 2 - eps, np.pi / 4, 10)
+        for i in range(10):
+            theta.append(theta_down1[i])
+            theta.append(theta_down2[i])
+        theta_up1 = np.linspace(0 - eps, -np.pi/4 + eps, n_theta)
+        theta_up2 = np.linspace(0 + eps, np.pi/4 - eps, n_theta)
+        for i in range(n_theta):
+            theta.append(theta_up1[i])
+            theta.append(theta_up2[i])
+        print("theta")
+        print(theta)
+        #np.linspace(-self.env.observation_space.high[0], self.env.observation_space.high[0], n_theta)
+        for i in theta:
+            for j in np.linspace(-self.env.observation_space.high[1] + 3, self.env.observation_space.high[1] - 3, n_theta_dot):
                     state = [i, j]
                     if s == 0:
                         disc_states = state
@@ -278,10 +294,11 @@ class PolicyIteration(object):
             for s in range(self.discrete_states.shape[0]):
                 state = self.discrete_states[s]
                 temp = self.policy_table[s]
-                p = np.argmax([self.predict_reward(state, a) + self.gamma * self.predict_next_state(state, a, False) for a in self.discrete_actions])
-                p = self.find_next_action(p)
+                p = np.argmax([self.predict_reward(state, a) + self.gamma *self.value_table[self.predict_next_state(state, a, True)] for a in self.discrete_actions])
+                #p = self.find_next_action(p)
+                p = self.discrete_actions[p]
                 self.policy_table[s] = p
-                print(temp, p)
+                #print(temp, p)
                 if not (temp == p):
                     policy_stable = False
             if policy_stable:
@@ -300,11 +317,16 @@ class PolicyIteration(object):
             state = self.env.reset()
             done = False
             while not done:
+                state = np.asarray([state])
                 idx, state = self.find_nearest_state(self.discrete_states, state)
                 action = np.asarray(self.policy_table[idx]).reshape(1, -1)
                 self.env.render()
+
+                print(self.predict_next_state(state, action, False))
                 next_state, reward, done, info = self.env.step(action)
                 state = next_state
+                print(state)
+
 
 
     def predict_reward(self, state, action):
@@ -332,12 +354,23 @@ class PolicyIteration(object):
 
     def find_nearest_state(self, states, state):
         idx = states.shape[0] + 1
-        best = np.inf
+        best_theta = -np.inf
         for i in range(states.shape[0]):
-            norm = np.linalg.norm(states[i].reshape(1, -1) - state)
-            if norm < best:
-                best = norm
-                idx = i
+            if np.abs(states[i][0] - state[0][0]) < np.abs(best_theta - state[0][0]):
+                best_theta = states[i][0]
+        best_thetadt = -np.inf
+        idx = -1
+        for i in range(states.shape[0]):
+            if states[i][0] == best_theta:
+                if np.abs(states[i][1] - state[0][1]) < np.abs(best_thetadt - state[0][1]):
+                    idx = i
+                    best_thetadt = states[i][1]
+        #difference = np.inf
+        #for i in range(states.shape[0]):
+            #dif = np.linalg.norm(states[i,:] - state)
+           # if dif < difference:
+               # difference = dif
+                #idx = i
         return idx, states[idx]
 
     def find_next_action(self, action):

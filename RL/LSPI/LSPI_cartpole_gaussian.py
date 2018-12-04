@@ -10,10 +10,10 @@ class LSPI:
     """epsilon: allowed margin of error such that p' = p
        n: Amount of basis functions (gaussians in this case)
        exploration_rate: chance of exploring instead of exploiting"""
-    def __init__(self, environment, exploration_rate = 0.3, discount_factor = 0.95, epsilon = 0.01):
+    def __init__(self, environment, exploration_rate = 0.3, discount_factor = 0.99, epsilon = 0.01):
         self.environment = environment
 
-        self.numberOfFeatures = 3*3*3*3*9 + 1
+        self.numberOfFeatures = 3*3*3*3*7 + 1
         self.m_discount_factor = discount_factor
         self.m_epsilon = epsilon
         self.exploration_rate = exploration_rate
@@ -36,7 +36,7 @@ class LSPI:
                 for sin_th in np.linspace(-1.0, 1, 3):
                     for cos_th in np.linspace(-1, 1, 3):
                         for x_dot in np.linspace(-1.0, 1.0, 3):
-                            for theta_dot in [-8, -4, -2, -1 , 0 ,1, 2, 4, 8]:
+                            for theta_dot in [-8, -3, -1 , 0 ,1,3, 8]:
                                 mu = [x, sin_th, cos_th, x_dot, theta_dot]
                                 self.m_mu.append(mu)
         self.m_mu = np.array(self.m_mu)
