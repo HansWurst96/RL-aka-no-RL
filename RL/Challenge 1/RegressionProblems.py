@@ -133,10 +133,10 @@ def cross_validated_error(model, X_train, y_train, n_folds):
 # All values for alpha yield a pretty high RMSE of around 4
 #@timecall()
 
-def get_error(model, samples, iterations, is_rewards=False, verbose=False):
+def get_error(model, samples, iterations, environnment='Pendulum-v2', is_rewards=False, verbose=False):
     errors, stds = [], []
     for i in range(iterations):
-        states, actions, rewards, next_states = generate_data(samples)
+        states, actions, rewards, next_states = generate_data(samples, environment=environnment)
         data = np.vstack((actions.T, states.T))
         data = data.T
         if is_rewards:
@@ -149,7 +149,7 @@ def get_error(model, samples, iterations, is_rewards=False, verbose=False):
         errors.append(np.round(np.array(error).mean(), 4))
         stds.append(np.round(np.array(error).std(), 4))
         if verbose:
-            print("Averaging {} % complete".format(np.round(100 * i/iterations, 1)))
+            print("Averaging {} % complete".format(np.round(100 * (i+1)/iterations, 1)))
     if verbose:
         plt.plot([i for i in range(iterations)], errors, label="mean cv error")
         plt.plot([i for i in range(iterations)], stds, label='standard deviation')
@@ -159,24 +159,8 @@ def get_error(model, samples, iterations, is_rewards=False, verbose=False):
               .format(samples, np.round(np.array(errors).mean(), 5), np.round(np.array(stds).mean(), 5)))
         plt.show()
 
-def improve_alpha(low, high, n, samples):
-    alphas = np.linspace(low, high, n)
-    errors, stds = [], []
-    it = 0
-    for alpha in alphas:
-        mean, s = run_task_two(samples, 'lr', alpha)
-        errors.append(mean)
-        stds.append(s)
-        it += 1
-        print("{} % finished (Iteration {}/{}...)".format(np.round(100 * it/n, 1), it, n))
-    plt.plot(alphas, errors, label='cv error')
-    plt.plot(alphas, stds, label='standard deviation')
-    plt.title('Optimize alpha KRR  ({} data samples)'.format(samples))
-    plt.legend()
-    plt.show()
-
-def grid_search(model, grid, samples, is_rewards=False):
-    states, actions, rewards, next_states = generate_data(samples)
+def grid_search(model, grid, samples, env='Pendulum-v2', is_rewards=False):
+    states, actions, rewards, next_states = generate_data(samples, environment=env)
     data = np.vstack((actions.T, states.T))
     # data = np.vstack((states.T, actions.T))
     data = data.T
@@ -190,7 +174,7 @@ def grid_search(model, grid, samples, is_rewards=False):
     return clf.best_params_
 
 mlp_grid = {
-    'hidden_layer_sizes': [(50,50,50), (50,100,50), (50,), (100,), (150,), (200,)],
+    'hidden_layer_sizes': [(50,50,50), (50,), (100,), (150,), (200,)],
     'activation': ['tanh', 'relu'],
     'max_iter': [200, 300, 400, 500],
     'alpha': [0.0001, 0.0002, 0.05],
@@ -204,7 +188,7 @@ rfr_grid = {
 }
 gpr_grid = {
     'normalize_y': [True, False],
-    'alpha': np.linspace(1e-15, 1e-6, 11),
+    'alpha': np.linspace(1e-13, 1e-6, 10),
     'n_restarts_optimizer': [0, 1, 2, 3],
 }
 bayesian_grid = {
@@ -215,17 +199,16 @@ bayesian_grid = {
     'lambda_1': np.linspace(1e-8, 1e-4, 6),
     'lambda_2': np.linspace(1e-8, 1e-4, 6),
 }
-#print(grid_search(GaussianProcessRegressor(), gpr_grid, 4000))
-#get_error(GaussianProcessRegressor(normalize_y=True, alpha=1e-14),10000, 5, True, True)
-#get_error(MLPRegressor(solver='lbfgs', max_iter=500,
-#                           hidden_layer_sizes=(50, 50, 50), learning_rate='adaptive', alpha=0.05, activation='tanh'),10000, 5, True, True)
-#print(grid_search(ExtraTreesRegressor(n_jobs=-1), rfr_grid, 4000))
-#print(grid_search(BayesianRidge(), bayesian_grid, 4000, is_rewards=))
-#get_error(BayesianRidge(n_iter=200, tol=0.0001, alpha_1=1e-8, alpha_2=0.0001, lambda_1=0.0001, lambda_2=1e-8), 10000, 5, True, True)
-#{'n_estimators': 100, 'min_samples_split': 2, 'criterion': 'mae', 'min_samples_leaf': 1}
-#ETR{'min_samples_split': 3, 'criterion': 'mse', 'n_estimators': 100, 'min_samples_leaf': 1}
-#print(grid_search(MLPRegressor(solver='lbfgs'), mlp_grid, 4000))
-#{'max_iter': 500, 'hidden_layer_sizes': (50, 50, 50), 'learning_rate': 'adaptive', 'alpha': 0.05, 'activation': 'tanh'}
+# SECTION: Results
+########################################################################################################################
+# Qube-states RFR {'min_samples_leaf': 1, 'n_estimators': 100, 'min_samples_split': 2, 'criterion': 'mse'} 10k: 0.75
+# Qube-states MLP {'hidden_layer_sizes': (50,), 'activation': 'relu', 'alpha': 0.0002, 'max_iter': 500, 'learning_rate': 'adaptive'} 12k: 0.58
+# Qube-rewards GPR {'alpha': 1e-06, 'normalize_y': True, 'n_restarts_optimizer': 0} 10k:
+
+
+#get_error(GaussianProcessRegressor(normalize_y=True, alpha=1e-6), 10000, 5, 'Qube-v0',is_rewards=True, verbose=True)
+#print(grid_search(GaussianProcessRegressor(), gpr_grid, 3000, 'Qube-v0', is_rewards=True))
+########################################################################################################################
 
 #@timecall()
 def sample_size_sampling(verbose=False):
@@ -363,6 +346,9 @@ def fit_state_model(environment):
     if environment == 'Pendulum-v2':
         states, actions, rewards, next_states = generate_data(10000, environment)
         clf = RandomForestRegressor(n_estimators=100, min_samples_split=2, criterion='mae', min_samples_leaf=1)
+    if environment == 'Qube-v0':
+        states, actions, rewards, next_states = generate_data(10000, environment)
+        clf = MLPRegressor(solver='lbfgs', hidden_layer_sizes=(50,), learning_rate='adaptive', max_iter=300)
     else:
         return -1
     data = np.vstack((actions.T, states.T))
@@ -379,6 +365,9 @@ def fit_reward_model(environment):
         clf = GaussianProcessRegressor(normalize_y=True, alpha=1e-14)
         #clf = MLPRegressor(solver='lbfgs', max_iter=500,
         #                   hidden_layer_sizes=(50, 50, 50), learning_rate='adaptive', alpha=0.05, activation='tanh')
+    if environment == 'Qube-v0':
+        states, actions, rewards, next_states = generate_data(10000, environment)
+        clf = GaussianProcessRegressor(normalize_y=True, alpha=1e-6)
     else:
         return -1
     data = np.vstack((actions.T, states.T))
