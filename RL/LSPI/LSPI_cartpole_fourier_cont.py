@@ -14,15 +14,25 @@ class LSPI:
        exploration_rate: chance of exploring instead of exploiting"""
     def __init__(self, environment, noF, bandwidth, exploration_rate = 1, discount_factor = 0.95, epsilon = 0.0000001):
         self.environment = environment
-        print(env.observation_space.high)
         self.numberOfFeatures = noF
         self.m_discount_factor = discount_factor
         self.m_epsilon = epsilon
         self.exploration_rate = exploration_rate
         self.exploration_decy_rate = 0.9999
 
+        self.lastDecision = 1
+        self.currentDecision = 1
+        self.lastAction = 0
+        self.currentAction = 0
+        self.resolution = 100
+        self.delta_min = 1
+        self.delta_max = self.resolution
+        self.delta = self.delta_min
+        self.maxA = 24
+        self.minA = -24
+        self.preComp = (self.maxA - self.minA) / (self.resolution - 1)
         #discretized action space as i dont know yet how to deal with continous ones
-        self.actions = [-24, 0, 24]
+        self.actions = [-1, 1]
 
         self.numberOfActions = len(self.actions)
         self.n = self.numberOfActions * self.numberOfFeatures
@@ -60,8 +70,40 @@ class LSPI:
         best_action_index = 0
         for i in range(len(summed_values)):
             if(summed_values[i] > summed_values[best_action_index]): best_action_index = i
+
         return best_action_index
 
+
+    def contAction(self):
+        if self.lastDecision + self.currentDecision == 0:
+            self.delta = self.delta - 1
+        else:
+            self.delta = self.delta + 1
+
+        if self.delta > self.delta_max:
+            self.delta = self.delta_max
+        elif self.delta < self.delta_min:
+            self.delta = self.delta_min
+
+        self.currentAction = self.lastAction + (self.currentDecision * self.delta * self.preComp)
+
+        if self.currentAction > self.maxA:
+            self.currentAction = self.maxA
+        elif self.currentAction < self.minA:
+            self.currentAction = self.minA
+
+        self.lastAction = self.currentAction
+        self.lastDecision = self.currentDecision
+
+        return self.currentAction
+
+    def reset(self):
+        self.lastDecision = 1
+        self.currentDecision = 1
+        self.lastAction = 0
+        self.currentAction = 0
+        self.delta = self.delta_min
+        
     """transforms five dimensional observation into four dimensional state"""
     def obsToState(self, obs):
         if (obs[1] <= 0):
@@ -106,14 +148,14 @@ class LSPI:
             return np.dot(self.m_B, self.m_b)
 
     """returns policy according to the LSPI algorithm"""
-    def LSPI_algorithm(self, firstAction_id = 0, training_samples = 120, maxTimeSteps = 2000):
+    def LSPI_algorithm(self, firstAction_id = 0, training_samples = 100, maxTimeSteps = 1000):
         doneActions = 0
         x_axis = []
         y_axis = []
         collected_data = []
         for n in range(training_samples):
 
-
+            self.reset()
             obs = self.environment.reset()
             current_state = self.obsToState(obs)
             print(n)
@@ -121,14 +163,16 @@ class LSPI:
                 currentAction_id = firstAction_id
             else:
                 currentAction_id = self.returnBestAction(current_state)
+
+            self.currentDecision = self.actions[currentAction_id]
+            self.currentAction = self.contAction()
             old_w = self.w
             current_reward = 0
 
-            debug_amountActionWasUsed = np.zeros((self.numberOfActions, 1))
             for t in range(maxTimeSteps):
                 previous_state = current_state
                 previousAction_id = currentAction_id
-                obs, reward, done, _ = self.environment.step(np.array([self.actions[previousAction_id]]))
+                obs, reward, done, _ = self.environment.step(np.array(self.currentAction))
                 doneActions += 1
 
                 current_reward += reward
@@ -143,21 +187,24 @@ class LSPI:
                     currentAction_id = randint(0,self.numberOfActions - 1)
                 else:
                     currentAction_id = self.returnBestAction(current_state)
-                    debug_amountActionWasUsed[currentAction_id] +=1
+
+
+                self.currentDecision = self.actions[currentAction_id]
+                self.contAction()
 
                 if doneActions % 10 == 0:
                     self.w = self.LSDTQ(current_state, previous_state, currentAction_id, previousAction_id, reward, doneActions)
 
                     distance = 0
-                    for k in range(len(self.w)):
-                        distance += (self.w[k] - old_w[k]) * (self.w[k] - old_w[k])
-                    if distance < self.m_epsilon:
-                        return self.w
+                    #for k in range(len(self.w)):
+                        #distance += (self.w[k] - old_w[k]) * (self.w[k] - old_w[k])
+                    #if distance < self.m_epsilon:
+                        #return self.w
                 else:
                     self.LSDTQ(current_state, previous_state, currentAction_id, previousAction_id, reward, doneActions)
 
                 data = [current_state, previous_state, currentAction_id, previousAction_id, reward]
-                collected_data.append(data)
+                #collected_data.append(data)
 
                 if doneActions % 500 == 0:
                     self.exploration_rate = 1 * (self.exploration_decy_rate ** doneActions)
@@ -176,17 +223,24 @@ class LSPI:
         print("start")
         allReward = 0
         for n in range(50):
+            self.reset()
             obs = self.environment.reset()
             current_state = self.obsToState(obs)
             currentAction_id = self.returnBestAction(current_state)
+            self.currentDecision = self.actions[currentAction_id]
+            act = self.contAction()
             for t in range(1000):
-                obs, reward, done, _ = self.environment.step(np.array([self.actions[currentAction_id]]))
+                obs, reward, done, _ = self.environment.step(np.array(act))
                 allReward += reward
                 if done:
                     break
-                #self.environment.render()
+                self.environment.render()
                 current_state = self.obsToState(obs)
                 currentAction_id = self.returnBestAction(current_state)
+                self.currentDecision = self.actions[currentAction_id]
+                act = self.contAction()
+                print(act)
+                print(self.delta)
         return allReward / 50
 
 env = gym.make('CartpoleSwingShort-v0')  # Use "Cartpole-v0" for the simulation
@@ -197,22 +251,23 @@ def main():
     env.step(np.array([0.]))
     env.close()
 
-    xd = LSPI(env, 320, 5.2)
+    xd = LSPI(env, 275, 5.2)
     xd.LSPI_algorithm()
+    xd.apply()
     print("pog")
-    xd2 = LSPI(env, 200, 5.2)
-    xd2.LSPI_algorithm()
+    #xd2 = LSPI(env, 200, 5.2)
+    #xd2.LSPI_algorithm()
     #for i in range(len(data)):
         #data_sample = data[i]
         #xd2.LSDTQ(data_sample[0], data_sample[1], data_sample[2], data_sample[3], data_sample[4], 1)
     #xd2.w = np.dot(xd2.m_B, xd2.m_b)
 
 
-    val1 = xd.apply()
-    val2 = xd2.apply()
+    #val1 = xd.apply()
+    #val2 = xd2.apply()
 
-    print(val1)
-    print(val2)
+    #print(val1)
+    #print(val2)
 
 
 def findBest(input):
