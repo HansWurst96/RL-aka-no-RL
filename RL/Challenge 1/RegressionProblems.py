@@ -346,7 +346,7 @@ def fit_state_model(environment):
     if environment == 'Pendulum-v2':
         states, actions, rewards, next_states = generate_data(10000, environment)
         clf = RandomForestRegressor(n_estimators=100, min_samples_split=2, criterion='mae', min_samples_leaf=1)
-    if environment == 'Qube-v0':
+    elif environment == 'Qube-v0':
         states, actions, rewards, next_states = generate_data(10000, environment)
         clf = MLPRegressor(solver='lbfgs', hidden_layer_sizes=(50,), learning_rate='adaptive', max_iter=300)
     else:
@@ -365,7 +365,7 @@ def fit_reward_model(environment):
         clf = GaussianProcessRegressor(normalize_y=True, alpha=1e-14)
         #clf = MLPRegressor(solver='lbfgs', max_iter=500,
         #                   hidden_layer_sizes=(50, 50, 50), learning_rate='adaptive', alpha=0.05, activation='tanh')
-    if environment == 'Qube-v0':
+    elif environment == 'Qube-v0':
         states, actions, rewards, next_states = generate_data(10000, environment)
         clf = GaussianProcessRegressor(normalize_y=True, alpha=1e-6)
     else:

@@ -6,11 +6,11 @@ from profilehooks import timecall
 import matplotlib.pyplot as plt
 import quanser_robots
 import RegressionProblems as reg
-
+import multiprocessing
 ########################################################################################################################
 # Global Constants for Discretization
 NUM_ACTIONS = 2
-NUM_STATES_1 = 11  # Theta
+NUM_STATES_1 = 11 # Theta
 NUM_STATES_2 = 9  # Theta dot
 # 2, 10, 9: -5.713
 # 2, 9, 9: -5.5
@@ -18,28 +18,32 @@ NUM_STATES_2 = 9  # Theta dot
 ########################################################################################################################
 
 class BaseClass():
-    def __init__(self, environment, tolerance, discount_factor, load=True):
+    def __init__(self, environment, tolerance, discount_factor, load=False):
         self.env = gym.make(environment)
         self.state_space = self.env.observation_space.shape[0]
         self.action_space = self.env.action_space.shape[0]
         self.tolerance = tolerance
         self.gamma = discount_factor
+        self.discrete_actions = self.discretize_action_space()
+        print(self.discrete_actions)
         if not load:
             self.state_model = reg.fit_state_model(environment)
-            pickle.dump(self.state_model, open("models\\Pendulum_state_model.sav", 'wb'))
+            #pickle.dump(self.state_model, open("models\\Pendulum_state_model.sav", 'wb'))
             self.reward_model = reg.fit_reward_model(environment)
-            pickle.dump(self.reward_model,  open("models\\Pendulum_reward_model.sav", 'wb'))
+            #pickle.dump(self.reward_model,  open("models\\Pendulum_reward_model.sav", 'wb'))
         else:
             self.state_model = pickle.load(open("models\\Pendulum_state_model.sav", 'rb'))
             self.reward_model = pickle.load(open("models\\Pendulum_reward_model.sav", 'rb'))
         self.discrete_states = self.discretize_state_space()
-        self.discrete_actions = self.discretize_action_space()
+
         self.value_table = np.zeros(self.discrete_states.shape[0])
         self.policy_table = np.zeros(self.discrete_states.shape[0])
 
     def discretize_state_space(self):
         s = 0
         discrete_states = []
+        epsilon = 0.0001
+
         for i in np.linspace(-self.env.observation_space.high[0], self.env.observation_space.high[0], NUM_STATES_1):
             for j in np.linspace(-self.env.observation_space.high[1], self.env.observation_space.high[1], NUM_STATES_2):
                 state = [i, j]
@@ -98,6 +102,7 @@ class BaseClass():
     def test_policy(self, render=False, verbose=True):
         #state = np.load("C:\\Users\\Jonas\\Documents\\Uni\\5.Semester\\VIPendulum.npy")
         reward_array = []
+        allIn = 0
         for i in range(100):
             state = self.env.reset()
             done = False
@@ -115,14 +120,20 @@ class BaseClass():
                 time_steps +=1
                 state = next_state
             reward_array.append(total_reward/time_steps)
+            allIn += total_reward
+        print(allIn)
+        print(allIn/100)
         if verbose:
             random_rewards = random_sampling(self.env)
             plt.plot([i for i in range(len(reward_array))], reward_array, label='trained')
-            plt.plot([i for i in range(len(random_rewards))], random_rewards, label='random')
+
+            #plt.plot([i for i in range(len(random_rewards))], random_rewards, label='random')
             plt.title("Training: {} Random: {}, state space:{} action_space{}"
                   .format(np.round(np.mean(reward_array), 4), np.round(np.mean(random_rewards), 4)
-                          , self.discrete_states.shape, self.discrete_actions.shape[0]))
+                          , self.discrete_states.shape, NUM_ACTIONS))
             plt.legend()
+            plt.ylabel('Reward/Step')
+            plt.xlabel('Number of episodes')
             #print(rewards)
             plt.show()
         return np.round(np.mean(reward_array), 4)
@@ -273,6 +284,22 @@ def test():
     VI = ValueIteration('Pendulum-v2', 0.001, 0.95)
     VI.iterate_()
     VI.test_policy()
+    f = open("policy.txt", "w+")
+    for i in range(VI.discrete_states.shape[0]):
+        state = VI.discrete_states[i]
+        th = state[0]
+        th = str(th)
+        thd = state[1]
+        thd = str(thd)
+        act = VI.policy_table[i]
+        f.write(th)
+        #f.write("%d" % th)
+        f.write(" ")
+        f.write(thd)
+        #f.write("%d" % thd)
+        f.write(" act: ")
+        f.write("%d\n" % act)
+    f.close()
 
 test()
 #main('Pendulum-v2', 0.001, 0.95)
