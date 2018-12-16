@@ -9,9 +9,12 @@ import RegressionProblems as reg
 
 ########################################################################################################################
 # Global Constants for Discretization
-NUM_ACTIONS = 5
-NUM_STATES_1 = 39  # Theta
-NUM_STATES_2 = 20  # Theta dot
+NUM_ACTIONS = 2
+NUM_STATES_1 = 11  # Theta
+NUM_STATES_2 = 9  # Theta dot
+# 2, 10, 9: -5.713
+# 2, 9, 9: -5.5
+# 2, 11, 9: -5.02, -4.88
 ########################################################################################################################
 
 class BaseClass():
@@ -52,17 +55,15 @@ class BaseClass():
         low = -high
         return np.linspace(low, high, NUM_ACTIONS)
 
-    def predict_rewards(self):
+    def predict_rewards(self, actions):
         clf = self.reward_model
         states = self.discrete_states
-        actions = self.policy_table
         input_data = np.vstack((actions.T, states.T)).T
         return clf.predict(input_data)
 
-    def predict_next_states(self):
+    def predict_next_states(self, actions):
         clf = self.state_model
         states = self.discrete_states
-        actions = self.policy_table
         input_data = np.vstack((actions.T, states.T)).T
         predictions = clf.predict(input_data)
         return [self.find_nearest_state(prediction) for prediction in predictions]
@@ -114,16 +115,17 @@ class BaseClass():
                 time_steps +=1
                 state = next_state
             reward_array.append(total_reward/time_steps)
-
-        random_rewards = random_sampling(self.env)
-        plt.plot([i for i in range(len(reward_array))], reward_array, label='trained')
-        plt.plot([i for i in range(len(random_rewards))], random_rewards, label='random')
-        plt.title("Training: {} Random: {}, state space:{} action_space{}"
+        if verbose:
+            random_rewards = random_sampling(self.env)
+            plt.plot([i for i in range(len(reward_array))], reward_array, label='trained')
+            plt.plot([i for i in range(len(random_rewards))], random_rewards, label='random')
+            plt.title("Training: {} Random: {}, state space:{} action_space{}"
                   .format(np.round(np.mean(reward_array), 4), np.round(np.mean(random_rewards), 4)
                           , self.discrete_states.shape, self.discrete_actions.shape[0]))
-        plt.legend()
-        #print(rewards)
-        plt.show()
+            plt.legend()
+            #print(rewards)
+            plt.show()
+        return np.round(np.mean(reward_array), 4)
 
 class ValueIteration(BaseClass):
     def bellman(self, state):
@@ -157,6 +159,23 @@ class ValueIteration(BaseClass):
             policy.append(np.argmax(np.asarray(value_array)))
         self.policy_table = policy
 
+    def iterate_(self):
+        i = 0
+        delta = 1
+        while delta > self.tolerance:
+            delta = 0
+            temp = self.value_table
+            values = np.array([self.predict_rewards(np.array([a] * self.discrete_states.shape[0])) +
+                     self.gamma * self.value_table[self.predict_next_states(np.array([a] * self.discrete_states.shape[0]))] for a in self.discrete_actions])
+            values = np.amax(values, axis=0)
+            self.value_table = values
+            delta = np.max(np.abs(temp - values), delta)
+
+        policy_indices = np.argmax([self.predict_rewards(np.array([a] * self.discrete_states.shape[0])) +
+                     self.gamma * self.value_table[self.predict_next_states(np.array([a] * self.discrete_states.shape[0]))] for a in self.discrete_actions], axis=0)
+        self.policy_table = np.array([self.discrete_actions[i] for i in policy_indices])
+
+
 def random_sampling(env):
     rewards = []
     for i in range(100):
@@ -181,7 +200,7 @@ class PolicyIteration(BaseClass):
                 print("Sweep number: ", sweep, "(evaluation)")
             delta = 0
             temp = np.copy(self.value_table)
-            self.value_table = self.predict_rewards() + self.gamma * self.value_table[self.predict_next_states()]
+            self.value_table = self.predict_rewards(self.policy_table) + self.gamma * self.value_table[self.predict_next_states(self.policy_table)]
             delta = np.max(np.abs(temp -self.value_table))
             sweep += 1
             if delta < self.tolerance:
@@ -238,11 +257,25 @@ class PolicyIteration(BaseClass):
 
 
 def main(env, tol, discount):
-    VI = PolicyIteration(env, tol, discount)
-    VI.policy_iteration()
+    rewards = []
+    for i in range(20):
+        NUM_STATES_1 = i
+        VI = ValueIteration(env, tol, discount)
+        VI.iterate_()
+        #plt.hist(VI.policy_table)
+        #plt.show()
+        reward = VI.test_policy(verbose=False)
+        rewards.append(reward)
+    plt.plot([i for i in range(len(rewards))], rewards)
+    plt.show()
+
+def test():
+    VI = ValueIteration('Pendulum-v2', 0.001, 0.95)
+    VI.iterate_()
     VI.test_policy()
 
-main('Pendulum-v2', 0.001, 0.95)
+test()
+#main('Pendulum-v2', 0.001, 0.95)
 
 
 
