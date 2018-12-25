@@ -1,5 +1,8 @@
 import numpy as np
 
+import gym
+import quanser_robots
+
 class ReplayMemory:
     def __init__(self, max_capacity, state_dim, n_actions):
         self.capacity = max_capacity
@@ -8,7 +11,7 @@ class ReplayMemory:
 
         self.S       = np.zeros((max_capacity, state_dim))
         self.S_prime = np.zeros((max_capacity, state_dim))
-        self.actions = np.zeros((max_capacity, n_actions))
+        self.actions = np.zeros(max_capacity)
         self.rewards = np.zeros((max_capacity, 1))
         self.is_done = np.full((max_capacity, 1), True, dtype=bool)
 
@@ -44,3 +47,19 @@ class ReplayMemory:
         is_done = self.is_done[indices]
 
         return (S, A, S_prime, R, is_done)
+
+def random_sampling(env):
+    rewards = []
+    for i in range(100):
+        state = env.reset()
+        done = False
+        total_reward = 0
+        time_steps = 0
+        while not done:
+            action = env.action_space.sample()
+            next_state, reward, done, info = env.step(action)
+            total_reward += reward
+            time_steps += 1
+            state = next_state
+        rewards.append(total_reward/time_steps)
+    return rewards
