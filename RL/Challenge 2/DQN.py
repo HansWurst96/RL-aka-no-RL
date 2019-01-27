@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import datetime
 import gym
 import quanser_robots
 
@@ -10,24 +11,51 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-env = gym.make('CartpoleSwingShort-v0')
-#env = gym.make('Pendulum-v0')
-#env = gym.make('MountainCarContinuous-v0')
+env_name = 'CartpoleSwingShort-v0'
+#env_name = 'Pendulum-v0'
+
+env = gym.make(env_name)
 
 #device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = torch.device("cpu")
 #  GLOBAL CONSTANTS ####################################################################################################
-GAMMA = 0.99
-EPSILON_INIT = 1
-EPSILON_FINAL = 0.1
-EPSILON_DECAY = 50000
-C = 3000
-RANDOM_SAMPLE_SIZE = 100000
-BATCH_SIZE = 8
+GAMMA = 0#0.95
+EPSILON_INIT = 0#1
+EPSILON_FINAL = 0#0.05
+EPSILON_DECAY = 0#300000
+C = 0#1000
+RANDOM_SAMPLE_SIZE = 0#70000
+BATCH_SIZE = 0#32
 
-NUM_ACTIONS = 7
+NUM_ACTIONS = 0#7
+
+LEARNING_RATE = 0#1e-5
+
+HIDDEN_NODES = 0# 150
 ########################################################################################################################
 
+def set_hyperparameters(buffer_size, batch_size, hidden_nodes, lr, c, epsilon, gamma, actions):
+
+    global GAMMA
+    GAMMA = gamma
+    global HIDDEN_NODES
+    HIDDEN_NODES = hidden_nodes
+    global RANDOM_SAMPLE_SIZE
+    RANDOM_SAMPLE_SIZE = buffer_size
+    global BATCH_SIZE
+    BATCH_SIZE = batch_size
+    global LEARNING_RATE
+    LEARNING_RATE = lr
+    global C
+    C = c
+    global EPSILON_INIT
+    EPSILON_INIT = epsilon[0]
+    global EPSILON_FINAL
+    EPSILON_FINAL = epsilon[1]
+    global EPSILON_DECAY
+    EPSILON_DECAY = epsilon[2]
+    global NUM_ACTIONS
+    NUM_ACTIONS = actions
 
 class Network(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -37,10 +65,13 @@ class Network(nn.Module):
         self.layer2 = nn.Linear(hidden_dim, output_dim)
         nn.init.xavier_uniform_(self.layer2.weight)
 
+        self.dropout = nn.Dropout(0.5)
+
     def forward(self, s):
         # x = torch.cat((s, a), dim=1)
         x = s
         x = F.relu(self.layer1(x))
+        #x = self.dropout(x)
         x = self.layer2(x)
         return x
 
@@ -52,6 +83,9 @@ class DQN:
         self.learning_rate = learning_rate
         self.discrete_actions = self.discretize_action_space()
         self.buffer = util.ReplayMemory(self.buffer_capacity, input_dim, self.discrete_actions.shape[0])
+        self.max_steps = 0
+        self.start = 0
+        self.end = 0
 
         self.network = Network(input_dim, hidden_dim, self.discrete_actions.shape[0]).to(device)
         self.target_network = Network(input_dim, hidden_dim, self.discrete_actions.shape[0]).to(device)
@@ -84,7 +118,7 @@ class DQN:
             else:
                 count += 1
                 state = next_state
-        #self.max_steps = np.array(steps).mean()
+        self.max_steps = np.array(steps).mean()
         print("Initializing Complete")
 
 
@@ -95,12 +129,13 @@ class DQN:
         target_count = 0
         rewards, losses = [], []
         for episode in range(epochs):
+            episode_steps = 0
             state = env.reset()
             action = np.random.choice(self.discrete_actions)
             done = False
             if episode % 10 == 0:
                 print("Starting Episode: ", episode, ("({} %)".format(100 * np.round(float(np.float64(episode/epochs)), 3))))
-            while True:
+            while episode_steps < 3 * self.max_steps:
                 state = torch.FloatTensor(state).to(device)
                 if np.random.uniform() <= epsilon:
                     action = np.random.choice(self.discrete_actions)
@@ -156,19 +191,43 @@ class DQN:
                     update_count = 0
             self.rewards.append(np.mean(rewards))
             self.losses.append(np.mean(losses))
+    def choose_action(self, state):
 
-    def visualize(self):
+        state = torch.FloatTensor(state).to(device)
+        action_index = torch.argmax(self.network(state.reshape(state.shape[0]))).detach().data.cpu().numpy()
+        action = np.array(self.discrete_actions[action_index])
+        return action
+
+    def load_model(self, path):
+        self.network.load_state_dict(torch.load(path))
+
+    def visualize(self, time, epochs):
+
+        mean_end_reward = np.mean(self.rewards[int(len(self.rewards) * 0.85):])
+        date = datetime.datetime.now().strftime("%m-%d %H-%M")
+        path = 'C:\\Users\\Jonas\\Desktop\\plots\\DQN\\'
+
         fig, (loss_plot, reward_plot) = plt.subplots(2, 1, sharex=True)
         loss_plot.plot([x for x in range(len(self.losses))], self.losses, label='Loss')
-        loss_plot.set_title(env)
+        loss_plot.set_title(util.shorten_name(env_name) + " Actions: " + str(NUM_ACTIONS) + " Time: " + str(int(time)) + " Peak : " + str(np.round(np.max(self.rewards), 3)) + ' 15%: ' + str(np.round(mean_end_reward, 3)))
         #loss_plot.ylabel("Loss")
         reward_plot.plot([x for x in range(len(self.rewards))], self.rewards, label='Reward')
+        arr = np.array(np.copy(self.rewards))
+        arr = np.nanmean(
+            np.pad(arr.astype(float), (0, ((10 - arr.size % 10) % 10)), mode='constant',
+                   constant_values=np.NaN).reshape(-1, 10), axis=1)
+        reward_plot.plot([10 * (i + 1) for i in range(len(arr))], arr, label='mean training reward')
         #reward_plot.ylabel("Average reward per timestep")
-        plt.text(0, -6, "C: {} \nBatch size: {} \nEpsilon: ({}, {}, {})\nGamma: {}\nNetwork: ({},)"
-                 .format(C, BATCH_SIZE, EPSILON_INIT, EPSILON_FINAL, EPSILON_DECAY, GAMMA, self.hidden_dim))
-        plt.show()
+        plt.text(0.1 * len(self.rewards), np.min(self.rewards),
+                 "C: {} \nBatch size: {} \nEpsilon: ({}, {}, {})\nGamma: {}\nNetwork: ({},) \nLearning rate: {} \nBuffer size: {}"
+                 .format(C, BATCH_SIZE, EPSILON_INIT, EPSILON_FINAL, EPSILON_DECAY, GAMMA, self.hidden_dim, LEARNING_RATE, RANDOM_SAMPLE_SIZE), bbox=dict(facecolor='white', alpha=0.5))
+        full_path = path + str(np.round(mean_end_reward, 2)) + '-' + date + str(int(np.round(time/epochs)))
+        plt.savefig(full_path + '.png',bbox_inches='tight')
+        torch.save(self.network.state_dict(), full_path)
+        #plt.show()
 
-    def test_policy(self, render=False):
+    def test_policy(self, render=False, random=False):
+        self.network.eval()
         rewards = []
         for i in range(100):
             state = env.reset()
@@ -187,8 +246,8 @@ class DQN:
                 time_steps += 1
                 state = next_state
             rewards.append(total_reward/time_steps)
-
-        random_rewards = util.random_sampling(env)
+        if random:
+            random_rewards = util.random_sampling(env)
 
         plt.plot([i for i in range(len(rewards))], rewards, label='trained')
         plt.plot([i for i in range(len(random_rewards))], random_rewards, label='random')
@@ -197,16 +256,16 @@ class DQN:
         # print(rewards)
         plt.show()
 
-def run():
-    dqn = DQN(env.observation_space.shape[0], 100, RANDOM_SAMPLE_SIZE, 1e-3)
-    dqn.initialize_replay_buffer()
-    start = time.time()  # cpu(15): 143 bs(4), gpu: 896
-    s, a, n, r, d = dqn.buffer.sample(8)
-    dqn.train(350)
-    print("Required time: ", np.round(time.time() - start, 3))
-    dqn.visualize()
-    dqn.test_policy(True)
+def run(epochs, load=False, path='0'):
+
+    dqn = DQN(env.observation_space.shape[0], HIDDEN_NODES, RANDOM_SAMPLE_SIZE, LEARNING_RATE)
+    if not load:
+        dqn.initialize_replay_buffer()
+        start = time.time()  # cpu(15): 143 bs(4), gpu: 896
+        dqn.train(epochs)
+    else:
+        dqn.load_model(path)
+    return dqn
 
 
-run()
 

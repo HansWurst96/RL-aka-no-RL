@@ -63,3 +63,16 @@ def random_sampling(env):
             state = next_state
         rewards.append(total_reward/time_steps)
     return rewards
+
+
+def shorten_name(environment_name):
+
+    shortener = {
+        'CartpoleSwingShort-v0': 'SwingShort',
+        'CartpoleStabShort-v0': 'StabShort',
+        'CartpoleSwingLong-v0': 'SwingLong',
+        'CartpoleStabLong-v0': 'StabLong',
+        'Pendulum-v0': 'Pendulum'
+    }
+    return shortener.get(environment_name, environment_name)
+
