@@ -198,7 +198,7 @@ def main():
     env.step(np.array([0.]))
     env.close()
 
-    xd = LSPI(env, 300, 5.2)
+    xd = LSPI(env, 260, 5.2)
     xd.LSPI_algorithm()
     xd.apply()
     print("pog")

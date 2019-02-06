@@ -138,6 +138,33 @@ class LSPI:
             basisFunctionColumn[i + currentAction_id * (self.numberOfFeatures)] = basis[i]
         return basisFunctionColumn
 
+    def collectData(self, training_samples = 1000, maxTimeSteps = 1000):
+        doneActions = 0
+        allData = []
+        for n in range(training_samples):
+            self.reset()
+            obs = self.environment.reset()
+            current_state = self.obsToState(obs, self.environment.action_space.sample())
+            print(n)
+            print(doneActions)
+            for t in range(maxTimeSteps):
+                prev_state = current_state
+                self.currentAction= self.environment.action_space.sample()
+                obs, reward, done, _ = self.environment.step(np.array(self.currentAction))
+                current_state = self.obsToState(obs, self.currentAction)
+                doneActions += 1
+
+                if self.currentAction > 0:
+                    dec = 1
+                else:
+                    dec = 0
+                data = [current_state, prev_state, dec, reward]
+                allData.append(data)
+                if done:
+                    break
+        return allData
+
+
     """returns parameters w"""
     def LSDTQ(self, current_state, previous_state, currentAction_id, previousAction_id, reward, current_n):
 
@@ -146,6 +173,19 @@ class LSPI:
         self.m_b = self.m_b +  bfc * reward
         if current_n % 10 == 0:
             return np.dot(self.m_B, self.m_b)
+
+
+    def applyLSPI(self):
+        data = self.collectData()
+        for n in range(len(data) - 1):
+            if n % 1000 == 0:
+                print(n)
+            curr_state = data[n][0]
+            prev_state = data[n][1]
+            act = data[n][2]
+            reward = data[n][3]
+            self.LSDTQ(curr_state, prev_state,data[n+1][2] , act, reward, 2)
+        self.w = np.dot(self.m_B, self.m_b)
 
     """returns policy according to the LSPI algorithm"""
     def LSPI_algorithm(self, firstAction_id = 0, training_samples = 50, maxTimeSteps = 1000):
@@ -249,8 +289,9 @@ def main():
     env.step(np.array([0.]))
     env.close()
     #old bw 5.2
-    xd = LSPI(env, 275, 24)
-    xd.LSPI_algorithm()
+    xd = LSPI(env, 250, 24)
+    #xd.LSPI_algorithm()
+    xd.applyLSPI()
     xd.apply()
     print("pog")
     #xd2 = LSPI(env, 200, 5.2)

@@ -34,6 +34,7 @@ will be manually analyzed to identify outstanding submissions.
 
 import numpy as np
 import DQN
+import lspi
 
 info = dict(
     group_number=8,  # change if you are an existing seminar/project group
@@ -42,17 +43,7 @@ info = dict(
                 "Keep this description short "
                 "as it is not meant to be a replacement for docstrings "
                 "but rather a quick summary to help the grader."),
-	settings = {
-		epochs: 650,
-		epsilon: [1, 0.05, 300000],
-		gamma: 0.95
-		learning_rate : 0.0001,
-		hidden_nodes : 150,
-		c : 5000,
-		batch_size : 16,
-		buffer_size : 70000,
-		actions = 7,
-	}
+
 
 
 def load_dqn_policy():
@@ -64,8 +55,8 @@ def load_dqn_policy():
 
     :return: function pi: s -> a
     """
-	path = supplementary/dqn_network_weights
-	dqn = DQN.run(1, True, path)
+    path = supplementary/dqn_network_weights
+    dqn = DQN.run(1, True, path)
     return lambda obs: dqn.choose_action(obs)
 
 
@@ -78,20 +69,20 @@ def train_dqn_policy(env):
     :param env: gym.Env
     :return: function pi: s -> a
     """
-	###############################################################
-	epochs = 650
+    ###############################################################
+    epochs = 650
 	
-	epsilon = [1, 0.05, 300000]
-	gamma = 0.95
-	learning_rate = 0.0001
-	hidden_nodes = 150
-	c = 5000
-	batch_size = 16
-	buffer_size = 70000
-	actions = 7
-	###############################################################
-	DQN.set_hyperparameters(buffer_size, batch_size, hidden_nodes, learning_rate, c, epsilon, gamma, actions)
-	dqn = DQN.run(epochs)
+    epsilon = [1, 0.05, 300000]
+    gamma = 0.95
+    learning_rate = 0.0001
+    hidden_nodes = 150
+    c = 5000
+    batch_size = 16
+    buffer_size = 70000
+    actions = 7
+    ###############################################################
+    DQN.set_hyperparameters(buffer_size, batch_size, hidden_nodes, learning_rate, c, epsilon, gamma, actions)
+    dqn = DQN.run(epochs)
     return lambda obs: dqn.choose_action(obs)
 
 
@@ -116,7 +107,9 @@ def train_lspi_policy(env):
     :param env: gym.Env
     :return: function pi: s -> a
     """
-    return lambda obs: np.array([0.5772])
+    ls = lspi.LSPI(env, 300, 4.6)
+    ls.learn()
+    return lambda obs: ls.returnBestAction(obs)
 
 
 # ==== Example evaluation
