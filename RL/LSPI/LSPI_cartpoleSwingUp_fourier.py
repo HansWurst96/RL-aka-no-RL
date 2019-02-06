@@ -20,7 +20,7 @@ class LSPI:
 
         self.bandwidth = bandwidth
         
-        self.actions = [-5, 5]
+        self.actions = [-2, 2]
         #discretized action space as i dont know yet how to deal with continous ones
 
         self.numberOfActions = len(self.actions)
@@ -296,7 +296,7 @@ class LSPI:
                 allReward += reward
                 if done:
                     break
-                self.environment.render()
+                #self.environment.render()
                 current_state = obs
                 currentAction_id = self.returnBestAction(current_state)
         print(self.bandwidth)
@@ -319,12 +319,12 @@ def main():
     y1 = []
     y2 = []
     y3 = []
-    xd = LSPI(env, 300, 0.1, True)
-    xd.load()
-    xd.apply()
-    #xd.learn()
-    #xd.save()
+    xd = LSPI(env, 300, 0.1, False)
+    #xd.load()
     #xd.apply()
+    xd.learn()
+    xd.save()
+    xd.apply()
 
     #for i in range(len(nof)):
         #print(i)
