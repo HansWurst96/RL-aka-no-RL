@@ -20,7 +20,7 @@ class LSPI:
 
         self.bandwidth = bandwidth
         
-        self.actions = [-24, 24]
+        self.actions = [-5, 5]
         #discretized action space as i dont know yet how to deal with continous ones
 
         self.numberOfActions = len(self.actions)
@@ -38,6 +38,7 @@ class LSPI:
         self.state_dim = 5
         self.freq = []
         self.shift = []
+        print("k")
         if not loaded:
             self.allFeatures = self.get_feature_fun(self.state_dim, self.numberOfFeatures, bandwidth, loaded)
 
@@ -53,6 +54,7 @@ class LSPI:
     def get_feature_fun(self, state_dim, feature_dim, bandwidth, loaded):
         if not loaded:
             freq = np.random.randn(feature_dim, state_dim) * np.sqrt(2 / bandwidth)
+            print(freq)
             shift = np.random.uniform(-np.pi, np.pi, feature_dim)
             self.freq = freq
             self.shift = shift
@@ -156,7 +158,7 @@ class LSPI:
     def LSPI_algorithm(self, firstAction_id = 0, training_samples = 200, maxTimeSteps = 2000):
         doneActions = 0
         data = []
-        while doneActions < 250000:
+        while doneActions < 50000:
 
 
             obs = self.environment.reset()
@@ -198,15 +200,18 @@ class LSPI:
         file = open("cartpoleFourierFreq.txt", "r")
         for i in range(self.numberOfFeatures * self.state_dim):
             if i == 0:
-                dt = []
+                dt = [0,0,0,0,0]
+                index = 0
             if i == (self.numberOfFeatures * self.state_dim -1):
                 self.freq.append(dt)
-            if i % 6 == 0 and i > 0:
+            if i % 5 == 0 and i > 0:
                 self.freq.append(dt)
-                dt = []
+                dt = [0,0,0,0,0]
+                index = 0
 
             x = file.readline()
-            dt.append(float(x))
+            dt[index] =float(x)
+            index = index +1
 
         file.close()
         self.freq = np.array(self.freq)
@@ -219,21 +224,21 @@ class LSPI:
         file.close()
         self.shift = np.array(self.shift)
 
-        self.get_feature_fun(self.state_dim, self.numberOfFeatures, self.bandwidth, True)
+        self.allFeatures = self.get_feature_fun(self.state_dim, self.numberOfFeatures, self.bandwidth, True)
 
     def save(self):
-        file = open("cartpoleSwingupParams.txt", "w")
+        file = open("cartpoleParams.txt", "w")
         for i in range(len(self.w)):
             file.write(str(self.w[i][0]) + "\n")
         file.close()
 
-        file = open("cartpoleFourierSwingupFreq.txt", "w")
+        file = open("cartpoleFourierFreq.txt", "w")
         for i in range(len(self.freq)):
             for j in range(self.state_dim):
                 file.write(str(self.freq[i][j]) + "\n")
         file.close()
 
-        file = open("cartpoleFourierSwingupShift.txt", "w")
+        file = open("cartpoleFourierShift.txt", "w")
         for i in range(len(self.shift)):
             file.write(str(self.shift[i])+"\n")
         file.close()
@@ -300,7 +305,7 @@ class LSPI:
         print(" ")
         return allReward / 50
 
-env = gym.make('CartpoleStabRR-v0')  # Use "Cartpole-v0" for the simulation
+env = gym.make('CartpoleStabShort-v0')  # Use "Cartpole-v0" for the simulation
 env.reset()
 def main():
 
@@ -314,7 +319,7 @@ def main():
     y1 = []
     y2 = []
     y3 = []
-    xd = LSPI(env, 300, 0.1)
+    xd = LSPI(env, 300, 0.1, True)
     xd.load()
     xd.apply()
     #xd.learn()
