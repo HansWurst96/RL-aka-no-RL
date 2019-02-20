@@ -12,7 +12,7 @@ class LSPI:
     """epsilon: allowed margin of error such that p' = p
        n: Amount of basis functions
        exploration_rate: chance of exploring instead of exploiting"""
-    def __init__(self, environment, noF, bandwidth, loaded = False, discount_factor = 0.99, epsilon = 0.0000001):
+    def __init__(self, environment, noF, bandwidth, loaded = False, discount_factor = 0.95, epsilon = 0.0000001):
         self.environment = environment
         self.numberOfFeatures = noF
         self.m_discount_factor = discount_factor
@@ -20,7 +20,7 @@ class LSPI:
 
         self.bandwidth = bandwidth
         
-        self.actions = [-2, 2]
+        self.actions = [-4, 4]
         #discretized action space as i dont know yet how to deal with continous ones
 
         self.numberOfActions = len(self.actions)
@@ -35,6 +35,7 @@ class LSPI:
         self.reuse_b = np.zeros((self.n, 1))
 
         self.allBFC = []
+        self.OnlineBFC = []
         self.state_dim = 5
         self.freq = []
         self.shift = []
@@ -88,11 +89,15 @@ class LSPI:
         return state
 
     """returns update step of LSTDQ-OPT algorithm"""
-    def matrixBupdate(self, i):
+    def matrixBupdate(self, i, online):
+        if not online:
+            bfc_array = self.allBFC
+        else:
+            bfc_array = self.OnlineBFC
 
-        basisFunctionColumn = self.allBFC[i]
+        basisFunctionColumn = bfc_array[i]
 
-        nextStateBasisFunctionColumn = self.allBFC[i+1]
+        nextStateBasisFunctionColumn = bfc_array[i+1]
 
         phi_B_product = np.dot((basisFunctionColumn - self.m_discount_factor * nextStateBasisFunctionColumn).T,
                                self.m_B)
@@ -103,17 +108,20 @@ class LSPI:
 
 
     """returns Basis function column"""
-    def getBasisFunctionColumn(self, allPrev, allPrevID, allCurr, allCurrID):
+    def getBasisFunctionColumn(self, allPrev, allPrevID, allCurr, allCurrID, online):
         for i in range(len(allPrev)):
             basisFunctionColumn = np.zeros((self.n, 1))
             current_state = allPrev[i]
             currentAction_id = allPrevID[i]
             # only the rows corresponding to the current action are not zero
             basis = self.allFeatures(np.transpose(current_state))
-            for i in range(self.numberOfFeatures):
-                basisFunctionColumn[i + currentAction_id * (self.numberOfFeatures)] = basis[i]
+            for j in range(self.numberOfFeatures):
+                basisFunctionColumn[j + currentAction_id * (self.numberOfFeatures)] = basis[j]
 
-            self.allBFC.append(basisFunctionColumn)
+            if not online:
+                self.allBFC.append(basisFunctionColumn)
+            else:
+                self.OnlineBFC.append(basisFunctionColumn)
 
         basisFunctionColumn = np.zeros((self.n, 1))
         current_state = allCurr[len(allCurr) - 1]
@@ -123,7 +131,10 @@ class LSPI:
         for i in range(self.numberOfFeatures):
             basisFunctionColumn[i + currentAction_id * (self.numberOfFeatures)] = basis[i]
 
-        self.allBFC.append(basisFunctionColumn)
+        if not online:
+            self.allBFC.append(basisFunctionColumn)
+        else:
+            self.OnlineBFC.append(basisFunctionColumn)
 
     def reuse(self):
         self.m_B = self.m_B - self.reuse_B
@@ -131,25 +142,33 @@ class LSPI:
         self.w = np.dot(self.m_B, self.m_b)
 
     """returns parameters w"""
-    def LSDTQ(self, data):
+    def LSDTQ(self, data, online = False):
 
         allPrev = data[:, 1]
         allPrevID = data[:, 3]
 
         allCur = data[:, 0]
         allCurrID = data[:, 2]
-        self.getBasisFunctionColumn(allPrev, allPrevID, allCur, allCurrID)
+        self.getBasisFunctionColumn(allPrev, allPrevID, allCur, allCurrID, online)
+        if not online:
+            bfc_array = self.allBFC
+        else:
+            bfc_array = self.OnlineBFC
         for i in range(len(data)):
             if i % 1000 == 0:
                 print(i)
             dt = data[i]
             reward = dt[4]
-            bfc = self.allBFC[i]
-            update_B = self.matrixBupdate(i)
+            bfc = bfc_array[i]
+
+            update_B = self.matrixBupdate(i, online)
             update_b = bfc * reward
 
             self.m_B = self.m_B - update_B
             self.m_b = self.m_b +  update_b
+
+
+        self.OnlineBFC = []
 
             #self.reuse_B += update_B
             #self.reuse_b += update_b
@@ -190,7 +209,7 @@ class LSPI:
 
 
     def load(self):
-        file = open("cartpoleStabparams.txt", "r")
+        file = open("cartpoleParams.txt", "r")
         for i in range(len(self.w)):
             x = file.readline()
             self.w[i] = float(x)
@@ -273,7 +292,7 @@ class LSPI:
                 if doneActions % 10 == 0:
                     doneActions = 0
                     data = np.array(data)
-                    self.LSDTQ(data)
+                    self.LSDTQ(data, True)
                     data = []
                     self.w = np.dot(self.m_B, self.m_b)
 
@@ -296,7 +315,7 @@ class LSPI:
                 allReward += reward
                 if done:
                     break
-                #self.environment.render()
+                self.environment.render()
                 current_state = obs
                 currentAction_id = self.returnBestAction(current_state)
         print(self.bandwidth)
@@ -319,12 +338,18 @@ def main():
     y1 = []
     y2 = []
     y3 = []
-    xd = LSPI(env, 300, 0.1, False)
+    xd = LSPI(env, 300, 0.1, True)
+    xd.load()
+    
+
+
     #xd.load()
     #xd.apply()
-    xd.learn()
-    xd.save()
-    xd.apply()
+    #xd.load()
+    #xd.apply()
+    #xd.learn()
+   # xd.save()
+   # xd.apply()
 
     #for i in range(len(nof)):
         #print(i)
@@ -387,20 +412,6 @@ def main():
     #print(val1)
     #print(val2)
 
-
-def findBest(input):
-    z_axis = []
-    noF = input
-    print(input)
-    averageReward = 0
-    for x in range(1):
-        print(x)
-        xd = LSPI(env, noF, 0.25)
-        xd.LSPI_algorithm()
-        averageReward += xd.apply()
-    averageReward = averageReward / 1
-    z_axis.append(averageReward)
-    return z_axis
 
 
 

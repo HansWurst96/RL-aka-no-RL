@@ -23,13 +23,13 @@ class LSPI:
         
 
         #discretized action space as i dont know yet how to deal with continous ones
-        self.actions = [-24, 24]
+        self.actions = [-1, 1]
 
         self.numberOfActions = len(self.actions)
         self.n = self.numberOfActions * self.numberOfFeatures
         #im not sure if the first B matrix is the first or the second one since the paper states that B is the inverse of A
         #self.m_B = np.zeros((n, n)) + 0.01 * np.ones((n,n))
-        self.m_B = 100000*np.identity((self.n))
+        self.m_B = 10000*np.identity((self.n))
         self.m_b = np.zeros((self.n, 1))
         self.w = np.zeros((self.n, 1))
 

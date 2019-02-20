@@ -42,8 +42,13 @@ class LSPI:
         self.m_b = np.zeros((self.n, 1))
         self.w = np.zeros((self.n, 1))
 
+        self.allBFC = []
+        self.OnlineBFC = []
+        self.state_dim = 3
+        self.freq = []
+        self.shift = []
 
-        self.allFeatures = self.get_feature_fun(3, self.numberOfFeatures, bandwidth)
+        self.allFeatures = self.get_feature_fun(self.state_dim, self.numberOfFeatures, bandwidth)
 
     """returns gaussian function of given state and mean"""
     def Gaussian(self, state, mean, variance = 1):
@@ -116,27 +121,51 @@ class LSPI:
         return state
 
     """returns update step of LSTDQ-OPT algorithm"""
-    def matrixBupdate(self, current_state, currentAction_id, bfc):
-        basisFunctionColumn = bfc
-        nextStateBasisFunctionColumn = self.getBasisFunctionColumn(current_state, currentAction_id)
+    def matrixBupdate(self, i, online):
+        if not online:
+            bfc_array = self.allBFC
+        else:
+            bfc_array = self.OnlineBFC
+
+        basisFunctionColumn = bfc_array[i]
+
+        nextStateBasisFunctionColumn = bfc_array[i+1]
 
         phi_B_product = np.dot((basisFunctionColumn - self.m_discount_factor * nextStateBasisFunctionColumn).T,
                                self.m_B)
 
         nominator = np.dot(self.m_B, np.dot(basisFunctionColumn, phi_B_product))
         denominator = 1 + np.dot(phi_B_product, basisFunctionColumn)
-
         return nominator / denominator
 
     """returns Basis function column"""
-    def getBasisFunctionColumn(self, current_state, currentAction_id):
-        basisFunctionColumn = np.zeros((self.n, 1))
+    def getBasisFunctionColumn(self, allPrev, allPrevID, allCurr, allCurrID, online):
+        for i in range(len(allPrev)):
+            basisFunctionColumn = np.zeros((self.n, 1))
+            current_state = allPrev[i]
+            currentAction_id = allPrevID[i]
+            # only the rows corresponding to the current action are not zero
+            basis = self.allFeatures(np.transpose(current_state))
+            for j in range(self.numberOfFeatures):
+                basisFunctionColumn[j + currentAction_id * (self.numberOfFeatures)] = basis[j]
 
+            if not online:
+                self.allBFC.append(basisFunctionColumn)
+            else:
+                self.OnlineBFC.append(basisFunctionColumn)
+
+        basisFunctionColumn = np.zeros((self.n, 1))
+        current_state = allCurr[len(allCurr) - 1]
+        currentAction_id = allCurrID[len(allCurrID) - 1]
         # only the rows corresponding to the current action are not zero
         basis = self.allFeatures(np.transpose(current_state))
         for i in range(self.numberOfFeatures):
             basisFunctionColumn[i + currentAction_id * (self.numberOfFeatures)] = basis[i]
-        return basisFunctionColumn
+
+        if not online:
+            self.allBFC.append(basisFunctionColumn)
+        else:
+            self.OnlineBFC.append(basisFunctionColumn)
 
     def collectData(self, training_samples = 1000, maxTimeSteps = 1000):
         doneActions = 0
@@ -166,13 +195,34 @@ class LSPI:
 
 
     """returns parameters w"""
-    def LSDTQ(self, current_state, previous_state, currentAction_id, previousAction_id, reward, current_n):
+    def LSDTQ(self, data, online = False):
 
-        bfc = self.getBasisFunctionColumn(previous_state, previousAction_id)
-        self.m_B = self.m_B - self.matrixBupdate(current_state, currentAction_id, bfc)
-        self.m_b = self.m_b +  bfc * reward
-        if current_n % 10 == 0:
-            return np.dot(self.m_B, self.m_b)
+        allPrev = data[:, 1]
+        allPrevID = data[:, 3]
+
+        allCur = data[:, 0]
+        allCurrID = data[:, 2]
+        self.getBasisFunctionColumn(allPrev, allPrevID, allCur, allCurrID, online)
+        if not online:
+            bfc_array = self.allBFC
+        else:
+            bfc_array = self.OnlineBFC
+        for i in range(len(data)):
+            if i % 1000 == 0:
+                print(i)
+            dt = data[i]
+            reward = dt[4]
+            bfc = bfc_array[i]
+
+            update_B = self.matrixBupdate(i, online)
+            update_b = bfc * reward
+
+            self.m_B = self.m_B - update_B
+            self.m_b = self.m_b +  update_b
+
+
+        self.OnlineBFC = []
+
 
 
     def applyLSPI(self):
@@ -188,72 +238,55 @@ class LSPI:
         self.w = np.dot(self.m_B, self.m_b)
 
     """returns policy according to the LSPI algorithm"""
-    def LSPI_algorithm(self, firstAction_id = 0, training_samples = 50, maxTimeSteps = 1000):
-        doneActions = 0
-        x_axis = []
-        y_axis = []
-        for n in range(training_samples):
 
+    def LSPI_algorithm(self, firstAction_id=0, training_samples=200, maxTimeSteps=2000):
+        doneActions = 0
+        data = []
+        while doneActions < 50000:
             self.reset()
             obs = self.environment.reset()
-            current_state = self.obsToState(obs, 0)
-            print(n)
-            if n == 0:
-                currentAction_id = firstAction_id
-            else:
-                currentAction_id = self.returnBestAction(current_state)
+            current_state = obs
+            currentAction_id = randint(0, self.numberOfActions - 1)
 
             self.currentDecision = self.actions[currentAction_id]
-            self.currentAction = self.contAction()
-            old_w = self.w
-            current_reward = 0
+            act = self.contAction()
 
+            f = 0
             for t in range(maxTimeSteps):
+                if f == 0:
+                    f = 1
+                    current_state = self.obsToState(obs, act)
+
                 previous_state = current_state
                 previousAction_id = currentAction_id
-                obs, reward, done, _ = self.environment.step(np.array(self.currentAction))
+
+
+                prev_act = act
+
+                obs, reward, done, _ = self.environment.step(np.array(prev_act))
                 doneActions += 1
 
-                current_reward += reward
-                #self.environment.render()
-                current_state = self.obsToState(obs, self.lastAction)
+                # self.environment.render()
+
 
                 if done:
                     break
 
-                #exploration
-                if(randint(0,999) < self.exploration_rate * 1000.):
-                    currentAction_id = randint(0,self.numberOfActions - 1)
-                else:
-                    currentAction_id = self.returnBestAction(current_state)
-
-
+                currentAction_id = randint(0, self.numberOfActions - 1)
                 self.currentDecision = self.actions[currentAction_id]
-                self.contAction()
+                act = self.contAction()
+                current_state = self.obsToState(obs, act)
 
-                if doneActions % 10 == 0:
-                    self.w = self.LSDTQ(current_state, previous_state, currentAction_id, previousAction_id, reward, doneActions)
+                dt = [current_state, previous_state, currentAction_id, previousAction_id, reward]
+                data.append(dt)
 
-                    distance = 0
-                    #for k in range(len(self.w)):
-                        #distance += (self.w[k] - old_w[k]) * (self.w[k] - old_w[k])
-                    #if distance < self.m_epsilon:
-                        #return self.w
-                else:
-                    self.LSDTQ(current_state, previous_state, currentAction_id, previousAction_id, reward, doneActions)
+        data = np.array(data)
+        return data
 
-
-
-                if doneActions % 500 == 0:
-                    self.exploration_rate = 1 * (self.exploration_decy_rate ** doneActions)
-
-
-            x_axis.append(doneActions)
-            y_axis.append(current_reward)
-
-        plt.scatter(x_axis, y_axis)
-        plt.show()
-
+    def learn(self):
+        data = self.LSPI_algorithm()
+        self.LSDTQ(data)
+        self.w = np.dot(self.m_B, self.m_b)
 
 
 
@@ -281,7 +314,7 @@ class LSPI:
                 print(self.delta)
         return allReward / 50
 
-env = gym.make('CartpoleSwingShort-v0')  # Use "Cartpole-v0" for the simulation
+env = gym.make('CartpoleStabShort-v0')  # Use "Cartpole-v0" for the simulation
 env.reset()
 def main():
 
@@ -291,7 +324,7 @@ def main():
     #old bw 5.2
     xd = LSPI(env, 250, 24)
     #xd.LSPI_algorithm()
-    xd.applyLSPI()
+    xd.learn()
     xd.apply()
     print("pog")
     #xd2 = LSPI(env, 200, 5.2)
