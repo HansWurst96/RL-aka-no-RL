@@ -19,6 +19,9 @@ class LSPI:
         self.m_epsilon = epsilon
 
         self.bandwidth = bandwidth
+
+        self.exploration = 1
+        self.exploration_decay = 0.9997
         
         self.actions = [-4, 4]
         #discretized action space as i dont know yet how to deal with continous ones
@@ -155,8 +158,8 @@ class LSPI:
         else:
             bfc_array = self.OnlineBFC
         for i in range(len(data)):
-            if i % 1000 == 0:
-                print(i)
+            #if i % 1000 == 0:
+                #print(i)
             dt = data[i]
             reward = dt[4]
             bfc = bfc_array[i]
@@ -271,11 +274,14 @@ class LSPI:
         doneActions = 0
         data = []
 
-        for i in range(100):
+        while doneActions < 30000:
             obs = self.environment.reset()
             current_state =obs
             currentAction_id = self.returnBestAction(current_state)
-            while not done:
+            for i in range(2000):
+                if doneActions % 1000 == 0:
+                    print(doneActions)
+                    print(self.exploration)
                 previous_state = current_state
                 previousAction_id = currentAction_id
                 obs, reward, done, _ = self.environment.step(np.array([self.actions[previousAction_id]]))
@@ -285,16 +291,22 @@ class LSPI:
                 if done:
                     break
 
-                currentAction_id =  self.returnBestAction(current_state)
+                self.environment.render()
+                if randint(0, 10) < self.exploration * 10:
+                    currentAction_id = randint(0,1)
+                else:
+                    currentAction_id =  self.returnBestAction(current_state)
                 dt = [current_state, previous_state, currentAction_id, previousAction_id, reward]
                 data.append(dt)
 
                 if doneActions % 10 == 0:
-                    doneActions = 0
+                    #doneActions = 0
                     data = np.array(data)
                     self.LSDTQ(data, True)
                     data = []
                     self.w = np.dot(self.m_B, self.m_b)
+                self.exploration = self.exploration * self.exploration_decay
+
 
 
 
@@ -338,9 +350,12 @@ def main():
     y1 = []
     y2 = []
     y3 = []
-    xd = LSPI(env, 300, 0.1, True)
-    xd.load()
-    
+    xd = LSPI(env, 300, 0.1, False)
+    xd.learn_online()
+    print("ok")
+    xd.apply()
+
+
 
 
     #xd.load()
