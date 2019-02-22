@@ -23,7 +23,7 @@ class LSPI:
         self.exploration = 1
         self.exploration_decay = 0.9997
         
-        self.actions = [-4, 4]
+        self.actions = [-4, -0.5,0.5, 4]
         #discretized action space as i dont know yet how to deal with continous ones
 
         self.numberOfActions = len(self.actions)
@@ -105,7 +105,7 @@ class LSPI:
         phi_B_product = np.dot((basisFunctionColumn - self.m_discount_factor * nextStateBasisFunctionColumn).T,
                                self.m_B)
 
-        nominator = np.dot(self.m_B, np.dot(basisFunctionColumn, phi_B_product))
+        nominator = np.dot(np.dot(self.m_B, basisFunctionColumn), phi_B_product)
         denominator = 1 + np.dot(phi_B_product, basisFunctionColumn)
         return nominator / denominator
 
@@ -158,8 +158,8 @@ class LSPI:
         else:
             bfc_array = self.OnlineBFC
         for i in range(len(data)):
-            #if i % 1000 == 0:
-                #print(i)
+            if i % 1000 == 0:
+                print(i)
             dt = data[i]
             reward = dt[4]
             bfc = bfc_array[i]
@@ -180,7 +180,7 @@ class LSPI:
     def LSPI_algorithm(self, firstAction_id = 0, training_samples = 200, maxTimeSteps = 2000):
         doneActions = 0
         data = []
-        while doneActions < 50000:
+        while doneActions < 100000:
 
 
             obs = self.environment.reset()
@@ -350,8 +350,9 @@ def main():
     y1 = []
     y2 = []
     y3 = []
-    xd = LSPI(env, 300, 0.1, False)
-    xd.learn_online()
+    xd = LSPI(env, 300, 0.1, True)
+    #xd.learn()
+    xd.load()
     print("ok")
     xd.apply()
 
