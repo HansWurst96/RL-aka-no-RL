@@ -1,0 +1,24 @@
+    def visualize(self, time, epochs):
+        max_reward = np.max(training_rewards)
+        mean_end_reward = np.mean(training_rewards[int(len(training_rewards)*0.85):])
+        #date = datetime.datetime.now().strftime("%m-%d %H%M")
+        date = datetime.datetime.now()
+        hour, minute = str(date.hour), str(date.minute)
+        path = 'C:\\Users\\Jonas\\Desktop\\plots\\DDPG\\NoiseExperimenting'
+        fig, (reward_plot) = plt.subplots(1, 1, sharex=True, figsize=(14, 10))
+        #loss_plot.plot([x for x in range(len(actor_losses))], actor_losses, label='Loss')
+        reward_plot.set_title(ut.shorten_name(env_name) + "\n" + "Time: " + str(int(time)) + "s Reward: (Peak : " + str(np.round(max_reward, 3)) + " Last 15 %: " + str(np.round(mean_end_reward, 3)) + ")")
+        # loss_plot.ylabel("Loss")
+        reward_plot.plot([x for x in range(len(training_rewards))], training_rewards, label='Reward', linewidth=0.75, alpha=0.8)
+
+        arr = np.array(np.copy(training_rewards))
+        arr = np.nanmean(
+        np.pad(arr.astype(float), (0, ((10 - arr.size % 10) % 10)), mode='constant', constant_values=np.NaN).reshape(-1, 10), axis=1)
+        arr = np.insert(arr, 0, training_rewards[0])
+        reward_plot.plot([10 * (i) for i in range(len(arr))], arr, label='mean training reward', linewidth=1.5)
+        plt.text(0.1 * len(training_rewards), (0.5 * (np.max(training_rewards))),
+                 "Tau: {} \nBatch size: {} \nGamma: {}\nNetwork: ({},) \nLearning rate: {} \nBuffer size: {} \nMultiplier: {}"
+                 .format(TAU, self.batch_size, self.gamma, self.hidden_dim,
+                         self.learning_rate, self.buffer_capacity, MULTIPLIER), bbox=dict(facecolor='white', alpha=0.5))
+        plt.savefig(path + ut.shorten_name(env_name) + "(" + hour + "h " + minute + "min)" +"1_parameter_noise"+ str(self.random) + str(np.round(mean_end_reward, 3)) + '.png', bbox_inches='tight')
+        #plt.show()
