@@ -3,7 +3,6 @@ import math
 from random import randint
 from random import uniform
 import gym
-from quanser_robots.cartpole.ctrl import SwingupCtrl
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from multiprocessing.dummy import Pool as ThreadPool
@@ -12,7 +11,7 @@ class LSPI:
     """epsilon: allowed margin of error such that p' = p
        n: Amount of basis functions
        exploration_rate: chance of exploring instead of exploiting"""
-    def __init__(self, environment, noF, bandwidth, loaded = False, discount_factor = 0.95, epsilon = 0.0000001):
+    def __init__(self, environment, noF, bandwidth, loaded = False, discount_factor = 0.9, epsilon = 0.0000001):
         self.environment = environment
         self.numberOfFeatures = noF
         self.m_discount_factor = discount_factor
@@ -21,16 +20,16 @@ class LSPI:
         self.bandwidth = bandwidth
 
         self.exploration = 1
-        self.exploration_decay = 0.9997
+        self.exploration_decay = 0.9998
         
-        self.actions = [-4, -0.5,0.5, 4]
+        self.actions = [-6, 6]
         #discretized action space as i dont know yet how to deal with continous ones
 
         self.numberOfActions = len(self.actions)
         self.n = self.numberOfActions * self.numberOfFeatures
         #im not sure if the first B matrix is the first or the second one since the paper states that B is the inverse of A
         #self.m_B = np.zeros((n, n)) + 0.01 * np.ones((n,n))
-        self.m_B = 100000*np.identity((self.n))
+        self.m_B = 10000*np.identity((self.n))
         self.m_b = np.zeros((self.n, 1))
         self.w = np.zeros((self.n, 1))
 
@@ -274,11 +273,11 @@ class LSPI:
         doneActions = 0
         data = []
 
-        while doneActions < 30000:
+        while doneActions < 200000:
             obs = self.environment.reset()
             current_state =obs
             currentAction_id = self.returnBestAction(current_state)
-            for i in range(2000):
+            for i in range(3000):
                 if doneActions % 1000 == 0:
                     print(doneActions)
                     print(self.exploration)
@@ -291,8 +290,8 @@ class LSPI:
                 if done:
                     break
 
-                self.environment.render()
-                if randint(0, 10) < self.exploration * 10:
+                #self.environment.render()
+                if randint(0, 1000) < self.exploration * 1000:
                     currentAction_id = randint(0,1)
                 else:
                     currentAction_id =  self.returnBestAction(current_state)
@@ -305,7 +304,7 @@ class LSPI:
                     self.LSDTQ(data, True)
                     data = []
                     self.w = np.dot(self.m_B, self.m_b)
-                self.exploration = self.exploration * self.exploration_decay
+                    self.exploration = self.exploration * self.exploration_decay
 
 
 
@@ -336,11 +335,11 @@ class LSPI:
         print(" ")
         return allReward / 50
 
-env = gym.make('CartpoleStabShort-v0')  # Use "Cartpole-v0" for the simulation
+env = gym.make('CartpoleSwingRR-v0')  # Use "Cartpole-v0" for the simulation
 env.reset()
 def main():
 
-    ctrl = SwingupCtrl(long=False)  # Use long=True if you are using the long pole
+
     env.step(np.array([0.]))
     env.close()
     nof = [ 200, 250, 275, 290, 305, 320,360]
@@ -350,84 +349,8 @@ def main():
     y1 = []
     y2 = []
     y3 = []
-    xd = LSPI(env, 300, 0.1, True)
-    #xd.learn()
-    xd.load()
-    print("ok")
-    xd.apply()
-
-
-
-
-    #xd.load()
-    #xd.apply()
-    #xd.load()
-    #xd.apply()
-    #xd.learn()
-   # xd.save()
-   # xd.apply()
-
-    #for i in range(len(nof)):
-        #print(i)
-
-        #xd = LSPI(env, nof[i], bandwidth[0], False)
-        #xd.learn()
-        #valy = xd.apply()
-        #y1.append(valy)
-
-       # xd = LSPI(env, nof[i], bandwidth[1], False)
-        #xd.learn()
-        #valy = xd.apply()
-        #y1.append(valy)
-
-        #xd = LSPI(env, nof[i], bandwidth[2], False)
-        #xd.learn()
-        #valy = xd.apply()
-        #y2.append(valy)
-
-        #xd = LSPI(env, nof[i], bandwidth[3], False)
-        #xd.learn()
-        #valy = xd.apply()
-        #y2.append(valy)
-
-        #xd = LSPI(env, nof[i], bandwidth[4], False)
-        #xd.learn()
-        #valy = xd.apply()
-        #y3.append(valy)
-
-        #xd = LSPI(env, nof[i], bandwidth[5], False)
-        #xd.learn()
-        #valy = xd.apply()
-        #y3.append(valy)
-
-        #x.append(nof[i])
-
-
-    #print(y1)
-    #print(y2)
-    #print(y3)
-    #plt.scatter(x, y1)
-    #plt.show()
-
-    #plt.scatter(x, y2)
-    #plt.show()
-
-    #plt.scatter(x, y3)
-    #plt.show()
-    #xd2 = LSPI(env, 200, 5.2)
-    #xd2.LSPI_algorithm()
-    #for i in range(len(data)):
-        #data_sample = data[i]
-        #xd2.LSDTQ(data_sample[0], data_sample[1], data_sample[2], data_sample[3], data_sample[4], 1)
-    #xd2.w = np.dot(xd2.m_B, xd2.m_b)
-
-
-    #val1 = xd.apply()
-    #val2 = xd2.apply()
-
-    #print(val1)
-    #print(val2)
-
+    xd = LSPI(env, 305, 6.5, False)
+    xd.learn_online()
 
 
 
