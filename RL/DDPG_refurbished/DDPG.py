@@ -46,8 +46,8 @@ class DDPG(object):
         and the use of a vastly smaller network. It furthermore supports different methods for generating random noise
         to add to the actor's output.
         :param env_name: String, String passed to gym.make() to create the environment
-        :param hidden_dim: int, Number of neurons in the hidden layers. Note: This number is used for both actor and critic
-                network, as well as for both hidden layers, if the three layered network architecture is chosen.
+        :param hidden_dim: int, Number of neurons in the hidden layers. Note: This number is used for both actor and
+                critic network, as well as for both hidden layers, if the three layered network architecture is chosen.
         :param buffer_capacity: int, Size the replay buffer will be initialized with
         :param gamma: float, Discount factor used in calculating the losses
         :param lr: Learning rate for the actor network. Note: The learning rate for the critic is chosen ten times as
@@ -57,13 +57,14 @@ class DDPG(object):
         :param tau: Parameter for performing soft updates
         :param epochs: int, Number of episodes that will be taken during learning
         :param epsilon_decay: float, Value after how many episodes eps_final will be reached (between 0 and 1)
-        :param multiplier: float, Coefficient (between 0 and 1) the environments maximum action is multiplied by to clip
-                the action space
-        :param simple: bool, Determines if a 2 layered network architecture will be used
-        :param parameter_noise: bool, Determines if noise is injected into the parameter space
-        :param action_noise: bool, Determines if noise is injected into the action space
-        :param gaussian: bool, Determines if gaussian noise is being used as action noise
-        :param oup: bool, Determines if an Ornstein-Uhlenbeck-Process is used to generate the noise for the action space
+        :param multiplier: float, optional, Coefficient (between 0 and 1) the environments maximum action is multiplied
+                by to clip the action space
+        :param simple: bool, optional, Determines if a 2 layered network architecture will be used
+        :param parameter_noise: bool, optional, Determines if noise is injected into the parameter space
+        :param action_noise: bool, optional, Determines if noise is injected into the action space
+        :param gaussian: bool, optional, Determines if gaussian noise is being used as action noise
+        :param oup: bool, optional, Determines if an Ornstein-Uhlenbeck-Process is used to generate the noise for the
+                action space
         """
         self.env_name = env_name
         self.env = gym.make(env_name)
@@ -145,6 +146,12 @@ class DDPG(object):
         return max_steps
 
     def train(self, render=False, liveplot=False):
+        """
+        Training loop that executes the training steps for as many episodes as specified in the initialization
+        :param render: bool, optional, If the environment should be rendered
+        :param liveplot: bool, optional, if the reward will be updated and drawn after every episode
+        :return: None
+        """
         i = 0
         eps = 1
         for episode in range(self.epochs):
@@ -217,8 +224,8 @@ class DDPG(object):
         Calculates noise that will be added to the actors output to aid exploration. How this noise is generated is
         determined by the methods parameters. It is possible to obtain noise form a gaussian distribution, an
         Ornstein-Uhlenbeck-Process or a uniform distribution.
-        :param gaussian: Determines if noise should be uncorrelated gaussian
-        :param oup: Determines whether an  Ornstein-Uhlenbeck-Process will be used for noise generation
+        :param gaussian: bool, optional, Determines if noise should be uncorrelated gaussian
+        :param oup: bool, optional, Determines whether an  Ornstein-Uhlenbeck-Process will be used for noise generation
         :return: scalar representing the calculated noise
         """
         if gaussian:
@@ -233,7 +240,7 @@ class DDPG(object):
     def soft_update(self):
         """
         Soft updating the target networks parameters according to the paper referenced in the DDPG init method.
-        :return:
+        :return: None
         """
         for target, src in zip(self.target_actor.parameters(), self.actor.parameters()):
             target.data.copy_(target.data * (1.0 - self.tau) + src.data * self.tau)
@@ -242,10 +249,19 @@ class DDPG(object):
             target.data.copy_(target.data * (1.0 - self.tau) + src.data * self.tau)
 
     def hard_update(self):
+        """
+        Hard updating the target networks (not advised to use)
+        :return: None
+        """
         self.target_actor.load_state_dict(self.actor.state_dict())
         self.target_critic.load_state_dict(self.critic.state_dict())
 
     def visualize(self, path):
+        """
+        Visualizes the learning curve and saves it as a .png
+        :param path: Destination the image should be saved at
+        :return: None
+        """
         mean_end_reward = np.mean(self.training_rewards[int(len(self.training_rewards) * 0.85):])
         fig, (reward_plot) = plt.subplots(1, 1, figsize=(16, 9))
         reward_plot.set_title(ut.shorten_name(self.env_name))
@@ -270,8 +286,14 @@ class DDPG(object):
             path + "simple_0.7_oup_noise_pen0.75" + str(self.random) + str(np.round(mean_end_reward, 3)) + '.png',
             bbox_inches=None)
 
-    def evaluate(self):
-        for i in range(100):
+    def evaluate(self, episodes=100):
+        """
+        Evaluates the model on a number of episodes and returns the descriptive statistics
+        :param episodes: int, optional, number of episodes the model will be evaluated on
+        :return: float, float, mean and standard deviation
+        """
+        episode_rewards = []
+        for i in range(episodes):
             state = torch.FloatTensor(self.env.reset()).to(device)
             done = False
             episode_reward, steps = 0, 0
@@ -282,13 +304,17 @@ class DDPG(object):
                 next_state = torch.FloatTensor(next_state).to(device)
                 episode_reward += reward
                 state = next_state
+            episode_rewards.append(episode_reward)
+        mean = np.mean(episode_rewards)
+        standard_deviation = np.std(episode_rewards)
+        return mean, standard_deviation
 
     def save_model(self, a_path, c_path):
         """
         Saves the current model using pytorch's save function.
-        :param a_path: Destination for storing the actor network parameters
-        :param c_path: Destination for storing the critic network parameters
-        :return:
+        :param a_path: string,  Destination for storing the actor network parameters
+        :param c_path: string, Destination for storing the critic network parameters
+        :return: None
         """
         torch.save(self.actor.state_dict(), a_path)
         torch.save(self.critic.state_dict(), c_path)
@@ -297,9 +323,9 @@ class DDPG(object):
         """
         Loads a pretrained model using pytorch's load function. Note: The number of nodes in each layer need to be the
         same in the DDPG object as in that of the previously learned one.
-        :param a_path: Path to the actor network parameters
-        :param c_path: Path to the critic network parameters
-        :return:
+        :param a_path: string, Path to the actor network parameters
+        :param c_path: string, Path to the critic network parameters
+        :return: None
         """
         self.actor.load_state_dict(torch.load(a_path))
         self.critic.load_state_dict(torch.load(c_path))
@@ -307,8 +333,8 @@ class DDPG(object):
     def simulate(self, render):
         """
         Renders the learned model for 25 episodes as a method of visually evaluating the model.
-        :param render bool, Determines if environment shall be rendered.
-        :return: --
+        :param render: bool,  if the environment shall be rendered (should be False for the robots)
+        :return: None
         """
         for i in range(25):
             done = False
@@ -319,5 +345,4 @@ class DDPG(object):
                 state, reward, done, info = self.env.step(action)
                 if render:
                     self.env.render()
-
-img_path = 'C:\\Users\\Jonas\\Desktop\\plots\\DDPG\\SwingShort\\'
+                    
