@@ -8,17 +8,17 @@ device = torch.device("cpu")
 class Actor(nn.Module):
     def __init__(self, input_dim, output_dim, max_action, first_hidden, second_hidden, decay, epochs, average_length, random=True):
         """
-        Two layered neural network to model the actor of the DDPG algorithm. It furthermore instantiates the gaussian noise layer,
-         if needed
-        :param input_dim: Dimension of the environments state space
-        :param output_dim: Dimension of the environments action space
-        :param max_action: Maximum action the actor is allowed to take
-        :param first_hidden: Number of neurons in the first hidden layer
-        :param second_hidden: Number of neurons in the second hidden layer
-        :param decay: Value after how many episodes eps_final will be reached (between 0 and 1)
-        :param epochs: Number of episodes the DDPG algorithm will train
-        :param average_length: Average number of steps an episode lasted
-        :param random: Binary value whether the gaussian noise layer has to be set
+        Two layered neural network to model the actor of the DDPG algorithm. It furthermore instantiates the gaussian
+                noise layer, if needed
+        :param input_dim: int, Dimension of the environments state space
+        :param output_dim: int, Dimension of the environments action space
+        :param max_action: float, Maximum action the actor is allowed to take
+        :param first_hidden: int, Number of neurons in the first hidden layer
+        :param second_hidden: int, Number of neurons in the second hidden layer
+        :param decay: float, Value after how many episodes eps_final will be reached (between 0 and 1)
+        :param epochs: int, Number of episodes the DDPG algorithm will train
+        :param average_length: float, Average number of steps an episode lasted
+        :param random: bool, optional, Binary value whether the gaussian noise layer has to be set
         """
         super(Actor, self).__init__()
         self.random = random
@@ -29,10 +29,15 @@ class Actor(nn.Module):
         nn.init.xavier_uniform_(self.layer2.weight)
         self.layer3 = nn.Linear(second_hidden, output_dim)
         nn.init.uniform_(self.layer3.weight, -0.003, 0.003)
-        if self.random:
+        if self.random:  # creating noise layer
             self.noise = GaussianNoise(self.max_action/5.0, 1, decay, 0.01, epochs, average_length)
 
     def forward(self, x):
+        """
+        Forward pass method for the actor
+        :param x: State
+        :return: Action
+        """
         if self.random:
             x = self.noise(x)
         x = F.relu(self.layer1(x))
@@ -44,16 +49,16 @@ class Actor(nn.Module):
 class SimpleActor(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim, max_action, decay, epochs, average_length, random=False):
         """
-        Single layered neural network to model the actor of the DDPG algorithm. It furthermore instantiates the gaussian noise layer,
-         if needed
-        :param input_dim: Dimension of the environments state space
-        :param output_dim: Dimension of the environments action space
-        :param hidden_dim: Number of neurons in the hidden layer
-        :param max_action: Maximum action the actor is allowed to take
-        :param decay: Value after how many episodes eps_final will be reached (between 0 and 1)
-        :param epochs: Number of episodes the DDPG algorithm will train
-        :param average_length: Average number of steps an episode lasted
-        :param random: Binary value whether the gaussian noise layer has to be set
+        Single layered neural network to model the actor of the DDPG algorithm. It furthermore instantiates the gaussian
+                noise layer, if needed
+        :param input_dim:  int, Dimension of the environments state space
+        :param output_dim: int, Dimension of the environments action space
+        :param hidden_dim: int, Number of neurons in the hidden layer
+        :param max_action: float, Maximum action the actor is allowed to take
+        :param decay: float, Value after how many episodes eps_final will be reached (between 0 and 1)
+        :param epochs: int, Number of episodes the DDPG algorithm will train
+        :param average_length: float, Average number of steps an episode lasted
+        :param random: bool, optional, Binary value whether the gaussian noise layer has to be set
         """
         super(SimpleActor, self).__init__()
         self.max_action = float(max_action)
@@ -66,6 +71,11 @@ class SimpleActor(nn.Module):
             self.noise = GaussianNoise(self.max_action/5.0, 1, decay, 0.01, epochs, average_length)
 
     def forward(self, x):
+        """
+        Forward pass method for the actor
+        :param x: State
+        :return: Action
+        """
         if self.random:
             x = self.noise(x)
         x = F.relu(self.layer1(x))
@@ -79,10 +89,10 @@ class Critic(nn.Module):
     def __init__(self, input_dim, action_dim, first_hidden, second_hidden):
         """
         Two layered neural network to learn the Q-function of the DDPG algorithm.
-        :param input_dim: Dimension of the environments state space
-        :param action_dim: Dimension of the environments action space
-        :param first_hidden: Number of neurons in the first hidden layer
-        :param second_hidden: Number of neurons in the second hidden layer
+        :param input_dim: int, Dimension of the environments state space
+        :param action_dim: int, Dimension of the environments action space
+        :param first_hidden: int, Number of neurons in the first hidden layer
+        :param second_hidden: int, Number of neurons in the second hidden layer
         """
         super(Critic, self).__init__()
         self.layer1 = nn.Linear(input_dim, first_hidden)
@@ -93,6 +103,12 @@ class Critic(nn.Module):
         nn.init.uniform_(self.layer3.weight, -0.003, 0.003)
 
     def forward(self, state, action):
+        """
+        Forward pass for the critic
+        :param state: State
+        :param action: Action
+        :return: Scalar Q value
+        """
         s = F.relu(self.layer1(state))
         x = torch.cat((s, action), dim=1)
         x = F.relu(self.layer2(x))
@@ -104,9 +120,9 @@ class SimpleCritic(nn.Module):
     def __init__(self, input_dim, action_dim, hidden_dim):
         """
         Single layered Neural network to model the critic of the DDPG algorithm. It learns the Q-function.
-        :param input_dim: Dimension of the environments state space
-        :param action_dim: Dimension of the environments action space
-        :param hidden_dim: Number of neurons in the hidden layer
+        :param input_dim: int, Dimension of the environments state space
+        :param action_dim: int, Dimension of the environments action space
+        :param hidden_dim: int, Number of neurons in the hidden layer
         """
         super(SimpleCritic, self).__init__()
         self.layer1 = nn.Linear(input_dim+action_dim, hidden_dim)
@@ -115,6 +131,12 @@ class SimpleCritic(nn.Module):
         nn.init.uniform_(self.layer2.weight, -0.003, 0.003)
 
     def forward(self, state, action):
+        """
+        Forward pass for the critic
+        :param state: State
+        :param action: Action
+        :return: Scalar Q value
+        """
         x = torch.cat((state, action), dim=1)
         x = F.relu(self.layer1(x))
         x = self.layer2(x)
