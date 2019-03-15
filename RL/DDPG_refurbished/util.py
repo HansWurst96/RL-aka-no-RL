@@ -1,15 +1,13 @@
-import collections
 import numpy as np
-
-def softmax(x, axis=None):
-    x = x - x.max(axis=axis, keepdims=True)
-    y = np.exp(x)
-    s_max = y / y.sum(axis=axis, keepdims=True)
-    length = s_max.shape[0]
-    return np.reshape(s_max, (length,))
 
 class ReplayMemory:
     def __init__(self, max_capacity, state_dim, n_actions):
+        """
+        Class for creating a replay memory to store transitions in and sample batches of transition from
+        :param max_capacity: int, How many transitions can be stored in the buffer
+        :param state_dim: int, State dimensions so the replay buffer can store them properly
+        :param n_actions: int, Action dimensions for multidimensional action spaces
+        """
         self.capacity = max_capacity
         self.index = None
         self.index_list = list(range(max_capacity))
@@ -24,7 +22,7 @@ class ReplayMemory:
         """
         Store one transition in the replay buffer
         :param experience:
-        :return: --
+        :return: None
         """
         if self.index == None or self.index == self.capacity - 1:
             self.index = 0
@@ -58,9 +56,9 @@ class OrnsteinUhlenbeckProcess():
         """
         Random process for generating random numbers that are correlated.
         :param n_actions: Dimension of the environments action space
-        :param mu: mean of the underlying gaussian distribution
-        :param theta: Coefficient to determine correlation
-        :param sigma: standard deviation of the underlying gaussian distribution
+        :param mu: float, optional,  mean of the underlying gaussian distribution
+        :param theta: float, optional, Coefficient to determine correlation
+        :param sigma: float, optional, standard deviation of the underlying gaussian distribution
         """
         self.theta = theta
         self.mu = mu
@@ -69,9 +67,17 @@ class OrnsteinUhlenbeckProcess():
         self.X = np.ones(n_actions) * mu
 
     def reset(self):
+        """
+        Resets the correlation
+        :return: None
+        """
         self.X = np.ones(self.n_action) * self.mu
 
     def calculate_noise(self):
+        """
+        Calculates the noise depending on the current time step
+        :return: Generated noise with shape of action dimension
+        """
         dX = self.theta * (self.mu - self.X)
         dX += self.sigma * np.random.randn(self.n_action)
         self.X += dX
@@ -81,7 +87,7 @@ def shorten_name(environment_name):
     """
     Shortens an environment name using a dictionary.
     :param environment_name: String passed to gym to make an environment
-    :return: String
+    :return: string, Shortened name
     """
 
     shortener = {
@@ -93,6 +99,10 @@ def shorten_name(environment_name):
         'MountainCarContinuous-v0': 'MCarCont'
     }
     return shortener.get(environment_name, environment_name)
+
+
+
+
 
 
 
